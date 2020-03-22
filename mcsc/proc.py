@@ -1,3 +1,5 @@
+import scanpy as sc
+
 def analyze(
     a, # adjacency matrix, cells x cells
     Y, # outcome, samples x 1 TODO: allow for cell-level outcome
