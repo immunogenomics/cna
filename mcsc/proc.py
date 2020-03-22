@@ -73,20 +73,21 @@ def analyze(
     C=None, # sample sizes, samples x 1
     B=None, # batch ids, samples x 1
     T=None, # sample-level covariates, samples x num_sample_covariates
-    s=None): # cell-level covariates, cells x num_cell_covariates
+    s=None, # cell-level covariates, cells x num_cell_covariates
+    Nnull=500, # number of null permutations
+    seed=0): # numpy random seed
     
     def corr(g,h):
         return (g - g.mean()).dot(h - h.mean()) / (len(g)*g.std()*h.std())
 
-    np.random.seed(0)
-    Nnull = 500
+    np.random.seed(seed)
 
     a, u, w, y = prepare(a, B, C, s, T, Y)
     nullmean = get_null_mean(B, C, u, w, Y)
     
     D, z, hits, bonf_z2, stds, mlp = dict(), dict(), dict(), dict(), dict(), dict()
     D[0] = y - nullmean
-    Dnull = get_null(num=Nnull) - nullmean[:,None]
+    Dnull = get_null(B, C, u, w, Y, Nnull) - nullmean[:,None]
 
     i = 0
     t0 = time.time()
