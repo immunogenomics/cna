@@ -4,9 +4,12 @@ def prepare(a, B, C, s, T, Y): # see analyze(..) for parameter descriptions
     # add self-loops to nn graph
     a = a.copy()
     a.setdiag(1)
-    colsums = np.array(a.sum(axis=0)).flatten()
 
-    # very samples are sorted by batch (for null permutation)
+    # add dummy batch info if none supplied
+    if B is None:
+        B = np.ones(len(C))
+
+    # verify samples are sorted by batch (for null permutation)
     if any(np.diff(B) < 0):
         print('ERROR: samples must be sorted by batch')
 
@@ -27,13 +30,13 @@ def prepare(a, B, C, s, T, Y): # see analyze(..) for parameter descriptions
             s]).astype(np.float64)
     else:
         u = np.repeat(T_, C, axis=0)
-    w = np.repeat(Cs, Cs).astype(np.float64)
+    w = np.repeat(C, C).astype(np.float64)
 
     # project covariates out of outcome and weight it
     y = y - u.dot(np.linalg.solve(u.T.dot(u / w[:,None]), u.T.dot(y / w)))
     y /= w
 
-    return a, u, w, y
+    return a, B, u, w, y
 
 def conditional_permutation(B, Y, num): # assumes B is sorted and that Y and B line up
     starts = np.concatenate([
@@ -47,7 +50,7 @@ def conditional_permutation(B, Y, num): # assumes B is sorted and that Y and B l
     return Y[ix]
 
 def get_null(B, C, u, w, Y, num):
-    nullY = conditional_permutation(Y.astype(np.float64), B, num=num)
+    nullY = conditional_permutation(B, Y.astype(np.float64), num)
     nully = np.repeat(1000*nullY, C, axis=0)
     nully -= u.dot(np.linalg.solve(u.T.dot(u / w[:,None]), u.T.dot(nully / w[:,None])))
     nully /= w[:,None]
@@ -82,10 +85,11 @@ def analyze(
 
     np.random.seed(seed)
 
-    a, u, w, y = prepare(a, B, C, s, T, Y)
+    a, B, u, w, y = prepare(a, B, C, s, T, Y)
+    colsums = np.array(a.sum(axis=0)).flatten()
     nullmean = get_null_mean(B, C, u, w, Y)
     
-    D, z, hits, bonf_z2, stds, mlp = dict(), dict(), dict(), dict(), dict(), dict()
+    D, z, bonf_z2, stds, mlp = dict(), dict(), dict(), dict(), dict()
     D[0] = y - nullmean
     Dnull = get_null(B, C, u, w, Y, Nnull) - nullmean[:,None]
 
@@ -104,11 +108,10 @@ def analyze(
         print('Bonf:', (z[i]**2 > bonf_z2[i]).sum())
 
         mlp[i] = -(st.norm.logsf(np.abs(z[i])/np.log(10) + np.log10(2)))
-        t, _, _ = sig.fdr(mlp[i], threshold=0.05, minuslog10p=True, st=False)
-        hits[i] = mlp[i] >= (-np.log10(t) if t > 0 else np.inf)
-        print('FDR:', hits[i].sum())
 
         #     if corr(Dold, D) > 0.99 or i > 100:
         if i >= 20:
             print()
             break
+
+    return D, z, bonf_z2, stds, mlp
