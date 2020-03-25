@@ -104,7 +104,6 @@ def analyze(a, Y, C=None, B=None, T=None, s=None, maxsteps=20, Nnull=500, seed=0
     dict: a set of maxsteps+1 arrays, each of which gives an unadjusted p-value
         for each cell at a given timepoint in the diffusion
     """
-    
     def corr(g,h):
         return (g - g.mean()).dot(h - h.mean()) / (len(g)*g.std()*h.std())
 
@@ -122,15 +121,16 @@ def analyze(a, Y, C=None, B=None, T=None, s=None, maxsteps=20, Nnull=500, seed=0
     t0 = time.time()
     while True:
         i += 1
-        print(i, time.time() - t0, end=' ')
+        print('step {:d} ({:.1f}s):'.format(i, time.time()-t0), end=' ')
+        
         D[i] = a.dot(D[i-1] / colsums)
         Dnull = a.dot(Dnull / colsums[:,None])
         stds[i] = np.sqrt((Dnull**2).mean(axis=1))
-        print(corr(D[i-1], D[i]))
+        print('corr: {:.3f}'.format(corr(D[i-1], D[i])), end=' ')
 
         z[i] = D[i] / stds[i]
         bonf_z2[i] = np.percentile(np.max((Dnull / stds[i][:,None])**2, axis=0), 95)
-        print('Bonf:', (z[i]**2 > bonf_z2[i]).sum())
+        print('hits:', (z[i]**2 > bonf_z2[i]).sum())
 
         mlp[i] = -(st.norm.logsf(np.abs(z[i])/np.log(10) + np.log10(2)))
 
