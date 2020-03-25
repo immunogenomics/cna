@@ -1,1 +1,1 @@
-from .proc import analyze
+from .diffusion import analyze
