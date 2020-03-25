@@ -72,7 +72,8 @@ def get_null_mean(B, C, u, w, Y):
 
 def analyze(a, Y, C=None, B=None, T=None, s=None,
         maxsteps=20, loops=1,
-        Nnull=100, seed=0):
+        Nnull=100, seed=0,
+        outdetail=1, outfreq=1):
     """
     Carries out multi-condition analysis.
 
@@ -89,6 +90,8 @@ def analyze(a, Y, C=None, B=None, T=None, s=None,
     Nnull (int): number of null permutations to use to estimate mean and variance of
         null distribution
     seed (int): random seed to use
+    outdetail (int): level of printed output detail
+    outfreq (int): how often to print output (every outfreq steps)
 
     Returns:
     2d array: a set of maxsteps+1 arrays, each of which gives the diffusion score of
@@ -124,7 +127,8 @@ def analyze(a, Y, C=None, B=None, T=None, s=None,
 
     t0 = time.time()
     for i in range(1, maxsteps+1):
-        print('step {:d} ({:.1f}s):'.format(i, time.time()-t0), end=' ')
+        if output > 0 and i % outfreq == 0:
+            print('step {:d} ({:.1f}s):'.format(i, time.time()-t0))
         
         D[i] = a.dot(D[i-1] / colsums) + loops * D[i-1]/colsums
         Dnull = a.dot(Dnull / colsums[:,None]) + loops * Dnull / colsums[:,None]
@@ -132,8 +136,10 @@ def analyze(a, Y, C=None, B=None, T=None, s=None,
 
         z[i] = D[i] / stds[i]
         bonf_z2[i] = np.percentile(np.max((Dnull / stds[i][:,None])**2, axis=0), 95)
+
+        if output > 1 and i % outfreq == 0:
         print(
-            'R2 {:.4f}, {:d} significant cells'.format(
+            '\tR2 {:.4f}, {:d} significant cells'.format(
                 corr(D[i-1], D[i])**2,
                 (z[i]**2 > bonf_z2[i]).sum()))
 
