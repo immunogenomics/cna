@@ -127,8 +127,8 @@ def analyze(a, Y, C=None, B=None, T=None, s=None,
 
     t0 = time.time()
     for i in range(1, maxsteps+1):
-        if output > 0 and i % outfreq == 0:
-            print('step {:d} ({:.1f}s):'.format(i, time.time()-t0))
+        if outdetail > 0 and i % outfreq == 0:
+            print('step {:d} ({:.1f}s)'.format(i, time.time()-t0))
         
         D[i] = a.dot(D[i-1] / colsums) + loops * D[i-1]/colsums
         Dnull = a.dot(Dnull / colsums[:,None]) + loops * Dnull / colsums[:,None]
@@ -137,11 +137,14 @@ def analyze(a, Y, C=None, B=None, T=None, s=None,
         z[i] = D[i] / stds[i]
         bonf_z2[i] = np.percentile(np.max((Dnull / stds[i][:,None])**2, axis=0), 95)
 
-        if output > 1 and i % outfreq == 0:
-        print(
-            '\tR2 {:.4f}, {:d} significant cells'.format(
-                corr(D[i-1], D[i])**2,
-                (z[i]**2 > bonf_z2[i]).sum()))
+        if outdetail > 1 and i % outfreq == 0:
+            print(
+                '\t{:d} significant cells'.format(
+                    (z[i]**2 > bonf_z2[i]).sum()))
+        if outdetail > 2 and i % outfreq == 0:
+            print(
+                '\tR2 {:.4f}'.format(
+                    corr(D[i-1], D[i])**2))
 
         mlp[i] = -(st.norm.logsf(np.abs(z[i])/np.log(10) + np.log10(2)))
 
