@@ -77,6 +77,7 @@ def analyze(
     B=None, # batch ids, samples x 1
     T=None, # sample-level covariates, samples x num_sample_covariates
     s=None, # cell-level covariates, cells x num_cell_covariates
+    maxsteps=20, # max number of steps to diffuse
     Nnull=500, # number of null permutations
     seed=0): # numpy random seed
     
@@ -110,7 +111,7 @@ def analyze(
         mlp[i] = -(st.norm.logsf(np.abs(z[i])/np.log(10) + np.log10(2)))
 
         #     if corr(Dold, D) > 0.99 or i > 100:
-        if i >= 20:
+        if i >= maxsteps:
             print()
             break
 
