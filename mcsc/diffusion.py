@@ -1,3 +1,5 @@
+import time
+import scipy.stats as st
 import numpy as np
 
 def prepare(a, B, C, s, T, Y): # see analyze(..) for parameter descriptions
@@ -68,11 +70,9 @@ def get_null_mean(B, C, u, w, Y):
 
     return nullmeans
 
-import time, gc
-import scipy.stats as st
 def analyze(a, Y, C=None, B=None, T=None, s=None,
         maxsteps=20, loops=1,
-        Nnull=500, seed=0):
+        Nnull=100, seed=0):
     """
     Carries out multi-condition analysis.
 
