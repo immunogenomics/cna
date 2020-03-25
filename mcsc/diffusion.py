@@ -7,11 +7,15 @@ def prepare(a, B, C, s, T, Y): # see analyze(..) for parameter descriptions
 
     # add dummy batch info if none supplied
     if B is None:
-        B = np.ones(len(C))
+        B = np.ones(len(Y))
 
     # verify samples are sorted by batch (for null permutation)
     if any(np.diff(B) < 0):
         print('ERROR: samples must be sorted by batch')
+
+    # set all sample sizes to be identical if no information supplied
+    if C is None:
+        C = np.ones(len(Y))
 
     # translate sample-level outcome to cell-level outcome
     y = np.repeat(1000*Y, C).astype(np.float64)
@@ -70,16 +74,36 @@ def get_null_mean(B, C, u, w, Y):
 
 import time, gc
 import scipy.stats as st
-def analyze(
-    a, # adjacency matrix, cells x cells
-    Y, # outcome, samples x 1 TODO: allow for cell-level outcome
-    C=None, # sample sizes, samples x 1
-    B=None, # batch ids, samples x 1
-    T=None, # sample-level covariates, samples x num_sample_covariates
-    s=None, # cell-level covariates, cells x num_cell_covariates
-    maxsteps=20, # max number of steps to diffuse
-    Nnull=500, # number of null permutations
-    seed=0): # numpy random seed
+def analyze(a, Y, C=None, B=None, T=None, s=None, maxsteps=20, Nnull=500, seed=0):
+    """
+    Carries out multi-condition analysis.
+
+    Parameters:
+    a (scipy.sparse.csr.csr_matrix): adjacency matrix of graph, assumed not to contain
+        self loops
+    Y (1d numpy array): sample-level outcome to associate to graph location
+    C (1d numpy array): number of cells in each sample
+    B (1d numpy array): batch id of each sample
+    T (2d numpy array): sample-level covariates to adjust for
+    s (2d numpy array): cell-level covariates to adjust for
+    maxsteps (int): maximum number of steps to take in random walk
+    Nnull (int): number of null permutations to use to estimate mean and variance of
+        null distribution
+    seed (int): random seed to use
+
+    Returns:
+    dict: a set of maxsteps+1 arrays, each of which gives the diffusion score of
+        each cell at a given timepoint of the diffusion
+    dict: a set of maxsteps+1 arrays, each of which gives the z-score of each cell
+        at a given timepoint of the diffusion
+    dict: a set of maxsteps+1 floats, each of which gives the squared z-score
+        threshold for a 5% family-wise error rate accounting for correlated tests
+    dict: a set of maxsteps+1 arrays, each of which gives the standard deviation of
+        diffusion scores under the null for each cell at a given timepoint in the
+        diffusion
+    dict: a set of maxsteps+1 arrays, each of which gives an unadjusted p-value
+        for each cell at a given timepoint in the diffusion
+    """
     
     def corr(g,h):
         return (g - g.mean()).dot(h - h.mean()) / (len(g)*g.std()*h.std())
@@ -116,3 +140,8 @@ def analyze(
             break
 
     return D, z, bonf_z2, stds, mlp
+
+
+
+
+
