@@ -1,10 +1,6 @@
 import numpy as np
 
 def prepare(a, B, C, s, T, Y): # see analyze(..) for parameter descriptions
-    # add self-loops to nn graph
-    a = a.copy()
-    a.setdiag(1)
-
     # add dummy batch info if none supplied
     if B is None:
         B = np.ones(len(Y))
@@ -74,7 +70,9 @@ def get_null_mean(B, C, u, w, Y):
 
 import time, gc
 import scipy.stats as st
-def analyze(a, Y, C=None, B=None, T=None, s=None, maxsteps=20, Nnull=500, seed=0):
+def analyze(a, Y, C=None, B=None, T=None, s=None,
+        maxsteps=20, loops=1,
+        Nnull=500, seed=0):
     """
     Carries out multi-condition analysis.
 
@@ -87,21 +85,22 @@ def analyze(a, Y, C=None, B=None, T=None, s=None, maxsteps=20, Nnull=500, seed=0
     T (2d numpy array): sample-level covariates to adjust for
     s (2d numpy array): cell-level covariates to adjust for
     maxsteps (int): maximum number of steps to take in random walk
+    loops (float): strength of self loops to add
     Nnull (int): number of null permutations to use to estimate mean and variance of
         null distribution
     seed (int): random seed to use
 
     Returns:
-    dict: a set of maxsteps+1 arrays, each of which gives the diffusion score of
+    2d array: a set of maxsteps+1 arrays, each of which gives the diffusion score of
         each cell at a given timepoint of the diffusion
-    dict: a set of maxsteps+1 arrays, each of which gives the z-score of each cell
+    2d array: a set of maxsteps+1 arrays, each of which gives the z-score of each cell
         at a given timepoint of the diffusion
-    dict: a set of maxsteps+1 floats, each of which gives the squared z-score
+    1d array: a set of maxsteps+1 floats, each of which gives the squared z-score
         threshold for a 5% family-wise error rate accounting for correlated tests
-    dict: a set of maxsteps+1 arrays, each of which gives the standard deviation of
+    2d array: a set of maxsteps+1 arrays, each of which gives the standard deviation of
         diffusion scores under the null for each cell at a given timepoint in the
         diffusion
-    dict: a set of maxsteps+1 arrays, each of which gives an unadjusted p-value
+    2d array: a set of maxsteps+1 arrays, each of which gives an unadjusted p-value
         for each cell at a given timepoint in the diffusion
     """
     def corr(g,h):
@@ -110,38 +109,34 @@ def analyze(a, Y, C=None, B=None, T=None, s=None, maxsteps=20, Nnull=500, seed=0
     np.random.seed(seed)
 
     a, B, u, w, y = prepare(a, B, C, s, T, Y)
-    colsums = np.array(a.sum(axis=0)).flatten()
-    nullmean = get_null_mean(B, C, u, w, Y)
     
-    D, z, bonf_z2, stds, mlp = dict(), dict(), dict(), dict(), dict()
+    D = np.zeros((maxsteps+1, len(y)))
+    z = np.zeros((maxsteps+1, len(y)))
+    bonf_z2 = np.zeros(maxsteps+1)
+    stds = np.zeros((maxsteps+1, len(y)))
+    mlp = np.ones((maxsteps+1, len(y)))
+
+    colsums = np.array(a.sum(axis=0)).flatten() + loops
+    nullmean = get_null_mean(B, C, u, w, Y)
+
     D[0] = y - nullmean
     Dnull = get_null(B, C, u, w, Y, Nnull) - nullmean[:,None]
 
-    i = 0
     t0 = time.time()
-    while True:
-        i += 1
+    for i in range(1, maxsteps+1):
         print('step {:d} ({:.1f}s):'.format(i, time.time()-t0), end=' ')
         
-        D[i] = a.dot(D[i-1] / colsums)
-        Dnull = a.dot(Dnull / colsums[:,None])
+        D[i] = a.dot(D[i-1] / colsums) + loops * D[i-1]/colsums
+        Dnull = a.dot(Dnull / colsums[:,None]) + loops * Dnull / colsums[:,None]
         stds[i] = np.sqrt((Dnull**2).mean(axis=1))
-        print('corr: {:.3f}'.format(corr(D[i-1], D[i])), end=' ')
 
         z[i] = D[i] / stds[i]
         bonf_z2[i] = np.percentile(np.max((Dnull / stds[i][:,None])**2, axis=0), 95)
-        print('hits:', (z[i]**2 > bonf_z2[i]).sum())
+        print(
+            'R2 {:.4f}, {:d} significant cells'.format(
+                corr(D[i-1], D[i])**2,
+                (z[i]**2 > bonf_z2[i]).sum()))
 
         mlp[i] = -(st.norm.logsf(np.abs(z[i])/np.log(10) + np.log10(2)))
 
-        #     if corr(Dold, D) > 0.99 or i > 100:
-        if i >= maxsteps:
-            print()
-            break
-
     return D, z, bonf_z2, stds, mlp
-
-
-
-
-
