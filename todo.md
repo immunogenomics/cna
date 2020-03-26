@@ -26,6 +26,8 @@ METHODS QUESTIONS
   p-values?
 - how should we assess significance? FDR, naive correlated Bonferroni, other
   Bonferronis?
+- better to use the eigenvalues of the adjacency matrix?
+- computational efficiency: first cluster any set of cells into, say, 10K tiny clusters?
 
 DATASETS
 - TBRU
