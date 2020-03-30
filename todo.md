@@ -18,6 +18,7 @@ Methods
   parameters
 
 METHODS QUESTIONS
+- does using dPCs first improve results substantially?
 - how many steps should the diffusion take? (use z-score correlation)
 - how many null permutations can we get down to while still having accurate
   p-values? (maybe 100?)
