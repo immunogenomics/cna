@@ -18,15 +18,14 @@ Methods
   parameters
 
 METHODS QUESTIONS
-- does pre- vs post-harmony make a difference?
-- does number of neighbors in umap graph matter?
-- how many steps should the diffusion take?
-- does the strength of self loops matter? (guess: not really)
+- how many steps should the diffusion take? (use z-score correlation)
 - how many null permutations can we get down to while still having accurate
-  p-values?
+  p-values? (maybe 100?)
 - how should we assess significance? FDR, naive correlated Bonferroni, other
   Bonferronis?
-- better to use the eigenvalues of the adjacency matrix?
+- does pre- vs post-harmony make a difference?
+- does number of neighbors in umap graph matter?
+- does the strength of self loops matter? (guess: not really)
 - computational efficiency: first cluster any set of cells into, say, 10K tiny clusters?
 
 DATASETS
