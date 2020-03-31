@@ -1,7 +1,7 @@
-import time
-import scipy.stats as st
 import numpy as np
+import scipy.stats as st
 from ._stats import conditional_permutation
+import time
 
 def prepare(a, B, C, s, T, Y): # see analyze(..) for parameter descriptions
     # add dummy batch info if none supplied
@@ -11,10 +11,6 @@ def prepare(a, B, C, s, T, Y): # see analyze(..) for parameter descriptions
     # verify samples are sorted by batch (for null permutation)
     if any(np.diff(B) < 0):
         print('ERROR: samples must be sorted by batch')
-
-    # set all sample sizes to be identical if no information supplied
-    if C is None:
-        C = np.ones(len(Y))
 
     # translate sample-level outcome to cell-level outcome
     y = np.repeat(1000*Y, C).astype(np.float64)
@@ -60,13 +56,13 @@ def get_null_mean(B, C, u, w, Y):
 
     return nullmeans
 
-def diffusion(a, Y, C=None, B=None, T=None, s=None,
+def diffusion(a, Y, C, B=None, T=None, s=None,
         maxsteps=100, loops=1,
         keepevery=None,
         stopthresh=0.9999,
         significance=0.05,
         Nnull=100, seed=0,
-        outdetail=1, outfreq=1):
+        outdetail=1, outfreq=5):
     """
     Carries out multi-condition analysis using diffusion.
 
@@ -145,10 +141,8 @@ def diffusion(a, Y, C=None, B=None, T=None, s=None,
 
     # do random walk
     start = time.time()
+    print('t=0')
     for t in range(1, maxsteps+1):
-        if outdetail > 0 and t % outfreq == 0:
-            print('step {:d} ({:.1f}s)'.format(t, time.time()-start))
-
         # take step
         dprev, zprev = dcurr, zcurr
         dcurr = a.dot(dcurr / colsums) + loops * dcurr/colsums
@@ -164,7 +158,12 @@ def diffusion(a, Y, C=None, B=None, T=None, s=None,
             break
         if keepevery is not None and (t-1) % keepevery == 0:
             save_snapshot()
+
+        # print progress
+        if outdetail > 0 and t % outfreq == 0:
+            print('t={:d} ({:.1f}s)'.format(t, time.time()-start))
     # save last timepoint if it isn't already saved
+    print('t={:d}: finished'.format(t))
     if t not in ts:
         save_snapshot()
 
