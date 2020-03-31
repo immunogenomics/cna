@@ -19,7 +19,7 @@ Methods
 
 METHODS QUESTIONS
 - does using dPCs first improve results substantially?
-- how many steps should the diffusion take? (use z-score correlation)
+- how many steps should the diffusion take? (use z-score correlation, might later consider surface area/volume of sig cells)
 - how many null permutations can we get down to while still having accurate
   p-values? (maybe 100?)
 - how should we assess significance? FDR, naive correlated Bonferroni, other
