@@ -18,11 +18,13 @@ Methods
   parameters
 
 METHODS QUESTIONS
-- how many steps should the diffusion take? (use z-score correlation)
+- does using dPCs first improve results substantially?
+- how many steps should the diffusion take? (use z-score correlation, might later consider surface area/volume of sig cells)
 - how many null permutations can we get down to while still having accurate
   p-values? (maybe 100?)
 - how should we assess significance? FDR, naive correlated Bonferroni, other
   Bonferronis?
+- what should we do with the cell-level p-values? UMAP them? dPCA them? differential abundance?
 - does pre- vs post-harmony make a difference?
 - does number of neighbors in umap graph matter?
 - does the strength of self loops matter? (guess: not really)
