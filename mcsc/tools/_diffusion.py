@@ -112,9 +112,31 @@ def diffusion(a, Y, C, B=None, T=None, s=None,
         ts.append(t)
         ds.append(dcurr)
         zs.append(zcurr)
-        bonf_z2s.append(np.percentile(
-            np.max((dnull / stdcurr[:,None])**2, axis=0),
-            100*(1-significance)))
+        znull = dnull / stdcurr[:,None]
+        bonf_z2s.append(
+            np.percentile(
+                np.max(znull**2, axis=0),
+                100*(1-significance)))
+
+        # TODO: compute FWERs
+        # compute FDRs
+        z2 = zcurr**2
+        znull2 = znull**2
+        def f(x, y): # return how many in y are greater than each entry in x
+            ix = np.argsort(x); iix = np.argsort(ix)
+            both = np.array([
+                    np.concatenate([x, y+1e-10]), # offset in case y=x
+                    np.concatenate([np.ones(len(x)), np.zeros(len(y))]),
+                    np.concatenate([np.zeros(len(x)), np.ones(len(y))])
+                ]).T
+            both = both[both[:,0].argsort()]
+            return len(y) - np.cumsum(both[:,2])[np.where(both[:,1])[0]][iix]
+        numhits = f(z2, z2)
+        numnullhits = np.array([f(z2, q) for q in znull2.T])
+        fdr = np.nan_to_num(numnullhits / numhits).mean(axis=0)
+        fdrs.append(fdr)
+        fdrs_std.append(np.nan_to_num(numnullhits / numhits).std(axis=0))
+
     def stop_condition():
         if stopthresh is None:
             return False
@@ -126,6 +148,8 @@ def diffusion(a, Y, C, B=None, T=None, s=None,
     ds = list()
     zs = list()
     bonf_z2s = list()
+    fdrs = list()
+    fdrs_std = list()
     ts = list()
 
     # prepare data
@@ -163,9 +187,9 @@ def diffusion(a, Y, C, B=None, T=None, s=None,
         if outdetail > 0 and t % outfreq == 0:
             print('t={:d} ({:.1f}s)'.format(t, time.time()-start))
     # save last timepoint if it isn't already saved
-    print('t={:d}: finished'.format(t))
     if t not in ts:
         save_snapshot()
+    print('t={:d}: finished'.format(t))
 
     # compute p-values and return
     zs = np.array(zs).squeeze()
@@ -177,4 +201,6 @@ def diffusion(a, Y, C, B=None, T=None, s=None,
         np.array(bonf_z2s).squeeze(), \
         mlps, \
         np.array(ds).squeeze(), \
-        np.array(ts).squeeze() \
+        np.array(ts).squeeze(), \
+        np.array(fdrs).squeeze(), \
+        np.array(fdrs_std).squeeze()
