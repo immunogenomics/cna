@@ -1,6 +1,6 @@
 import numpy as np
 import scipy.stats as st
-from ._stats import conditional_permutation
+from ._stats import conditional_permutation, type1errors, significant_fwer
 import time
 
 def prepare(a, B, C, s, T, Y): # see analyze(..) for parameter descriptions
@@ -60,7 +60,7 @@ def diffusion(a, Y, C, B=None, T=None, s=None,
         maxsteps=100, loops=1,
         keepevery=None,
         stopthresh=0.9999,
-        significance=0.05,
+        significance=None,
         Nnull=100, seed=0,
         outdetail=1, outfreq=5):
     """
@@ -81,7 +81,9 @@ def diffusion(a, Y, C, B=None, T=None, s=None,
     stopthresh (float): diffusion stops when correlation between successive sets of z-scores
         goes above this number. Passing None causes diffusion to continue for maxsteps steps.
     significance (float or iterable of floats): set of significance levels for which
-        diffusion will supply z-score thresholds accounting for correlation among cells.
+        diffusion will perform significance testing with FWER control. Default is None,
+        for which diffusion returns estimated FWERs as well as FDRs and FEPs, but this is
+        slower.
     Nnull (int): number of null permutations to use to estimate mean and variance of
         null distribution
     seed (int): random seed to use
@@ -108,34 +110,29 @@ def diffusion(a, Y, C, B=None, T=None, s=None,
             return 0
         else:
             return (g - g.mean()).dot(h - h.mean()) / (len(g)*gstd*hstd)
+    def f(x, y): # return how many in y are greater than each entry in x
+        ix = np.argsort(x); iix = np.argsort(ix)
+        both = np.array([
+                np.concatenate([x, y+1e-10]), # offset in case y=x
+                np.concatenate([np.ones(len(x)), np.zeros(len(y))]),
+                np.concatenate([np.zeros(len(x)), np.ones(len(y))])
+            ]).T
+        both = both[both[:,0].argsort()]
+        return len(y) - np.cumsum(both[:,2])[np.where(both[:,1])[0]][iix]
     def save_snapshot():
         ts.append(t)
         ds.append(dcurr)
         zs.append(zcurr)
         znull = dnull / stdcurr[:,None]
-        bonf_z2s.append(
-            np.percentile(
-                np.max(znull**2, axis=0),
-                100*(1-significance)))
 
-        # TODO: compute FWERs
-        # compute FDRs
-        z2 = zcurr**2
-        znull2 = znull**2
-        def f(x, y): # return how many in y are greater than each entry in x
-            ix = np.argsort(x); iix = np.argsort(ix)
-            both = np.array([
-                    np.concatenate([x, y+1e-10]), # offset in case y=x
-                    np.concatenate([np.ones(len(x)), np.zeros(len(y))]),
-                    np.concatenate([np.zeros(len(x)), np.ones(len(y))])
-                ]).T
-            both = both[both[:,0].argsort()]
-            return len(y) - np.cumsum(both[:,2])[np.where(both[:,1])[0]][iix]
-        numhits = f(z2, z2)
-        numnullhits = np.array([f(z2, q) for q in znull2.T])
-        fdr = np.nan_to_num(numnullhits / numhits).mean(axis=0)
-        fdrs.append(fdr)
-        fdrs_std.append(np.nan_to_num(numnullhits / numhits).std(axis=0))
+        if significance is None:
+            fwer, fep95, fdr = type1errors(zcurr, znull)
+            fwers.append(fwer)
+            feps95.append(fep95)
+            fdrs.append(fdr)
+        else:
+            hits = significant_fwer(zcurr, znull, significance)
+            fwers.append(hits)
 
     def stop_condition():
         if stopthresh is None:
@@ -147,16 +144,16 @@ def diffusion(a, Y, C, B=None, T=None, s=None,
     np.random.seed(seed)
     ds = list()
     zs = list()
-    bonf_z2s = list()
+    fwers = list()
+    feps95 = list()
     fdrs = list()
-    fdrs_std = list()
     ts = list()
 
     # prepare data
     a, B, u, w, y = prepare(a, B, C, s, T, Y)
     colsums = np.array(a.sum(axis=0)).flatten() + loops
     nullmean = get_null_mean(B, C, u, w, Y)
-    significance = np.array(significance)
+    significance = np.array(significance) if significance is not None else None
 
     # initialize time 0 of random walk
     dcurr = y - nullmean
@@ -191,16 +188,9 @@ def diffusion(a, Y, C, B=None, T=None, s=None,
         save_snapshot()
     print('t={:d}: finished'.format(t))
 
-    # compute p-values and return
-    zs = np.array(zs).squeeze()
-    mlps = -st.norm.logsf(
-        np.abs(zs)/np.log(10) + np.log10(2)
-        )
 
-    return zs, \
-        np.array(bonf_z2s).squeeze(), \
-        mlps, \
-        np.array(ds).squeeze(), \
-        np.array(ts).squeeze(), \
+    return np.array(zs).squeeze(), \
+        np.array(fwers).squeeze(), \
         np.array(fdrs).squeeze(), \
-        np.array(fdrs_std).squeeze()
+        np.array(feps95).squeeze(), \
+        np.array(ts).squeeze()
