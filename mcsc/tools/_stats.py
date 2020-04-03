@@ -46,6 +46,10 @@ def tail_counts(z, znull):
     return tails[:, iix]
 
 def type1errors(z, znull):
+    """
+    znull is assumed to be of shape len(z) x k, where k is the number of
+        null instantiations.
+    """
     # get tail counts
     tails = tail_counts(z, znull)
     ranks = len(z) - np.argsort(np.argsort(z**2))
