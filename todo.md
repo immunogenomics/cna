@@ -24,6 +24,7 @@ METHODS QUESTIONS
   p-values? (maybe 100?)
 - how should we assess significance? FDR, naive correlated Bonferroni, other
   Bonferronis?
+- is it worth thinking about creating an effect size in addition to a z-score? For, e.g., comparison of nested models.
 - what should we do with the cell-level p-values? UMAP them? dPCA them? differential abundance?
 - does pre- vs post-harmony make a difference?
 - does number of neighbors in umap graph matter?
