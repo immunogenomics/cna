@@ -25,7 +25,7 @@ METHODS QUESTIONS - OPEN
 - does the strength of self loops matter? (guess: not really)
 
 METHODS QUESTIONS - TENTATIVELY RESOLVED
-- how many steps should the diffusion take? exponential growth of results (might later consider surface area/volume of sig cells)
+- how many steps should the diffusion take? exponential growth of results (might later consider surface area/volume of sig cells or timpoint with lowest overall FWER of results)
 - how many null permutations can we get down to while still having accurate p-values? (100 for now, needs confirmatory analysis)
 - how should we assess significance? FWER for now (leaving FDR and P(FDP < 5%) implemented)
 
