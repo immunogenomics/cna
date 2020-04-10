@@ -17,26 +17,29 @@ Methods
 - MASC with clustering using default
   parameters
 
-METHODS QUESTIONS
-- does using dPCs first improve results substantially?
-- how many steps should the diffusion take? (use z-score correlation, might later consider surface area/volume of sig cells)
-- how many null permutations can we get down to while still having accurate
-  p-values? (maybe 100?)
-- how should we assess significance? FDR, naive correlated Bonferroni, other
-  Bonferronis?
+METHODS QUESTIONS - OPEN
 - is it worth thinking about creating an effect size in addition to a z-score? For, e.g., comparison of nested models.
-- what should we do with the cell-level p-values? UMAP them? dPCA them? differential abundance?
 - does pre- vs post-harmony make a difference?
+- what should we do with the cell-level p-values? UMAP them? dPCA them? differential abundance?
 - does number of neighbors in umap graph matter?
 - does the strength of self loops matter? (guess: not really)
+
+METHODS QUESTIONS - TENTATIVELY RESOLVED
+- how many steps should the diffusion take? exponential growth of results (might later consider surface area/volume of sig cells)
+- how many null permutations can we get down to while still having accurate p-values? (100 for now, needs confirmatory analysis)
+- how should we assess significance? FWER for now (leaving FDR and P(FDP < 5%) implemented)
+
+DOWNSTREAM METHODS PROJECTS
+- Input different features (e.g., dPCs, pairwise products) to diffusion to find different kinds of signal
 - computational efficiency: first cluster any set of cells into, say, 10K tiny clusters?
 
 DATASETS
-- TBRU
+- TBRU x 3 modalities
     - TB, sex, age, ancestry
 - MASC data set: RA case/ctrl
 - Abundance QTLs?
-- Cell-type-specific eQTLs a la Kaz? not yet
+- Cell-type-specific eQTLs a la Kaz? maybe later
 - Ebola data set? talk to dylan
+- V2F iPSC data set? (single cell + cell morphology via cellpainter; maybe later)
 - (Non-single-cell data sets?)
 
