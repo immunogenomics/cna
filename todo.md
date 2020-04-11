@@ -23,6 +23,7 @@ METHODS QUESTIONS - OPEN
 - what should we do with the cell-level p-values? UMAP them? dPCA them? differential abundance?
 - does number of neighbors in umap graph matter?
 - does the strength of self loops matter? (guess: not really)
+- should we have a version of the method where you can condition on a cell population, e.g., to determine whether two different signals for a given phenotype are independent or not? The intuition would be: imagine running diffusion with the second cell type 0'd out and seeing if it then lights up. But in practice it's probably better to actually condition.
 
 METHODS QUESTIONS - TENTATIVELY RESOLVED
 - how many steps should the diffusion take? exponential growth of results (might later consider surface area/volume of sig cells or timpoint with lowest single estimated FWER across cells)
