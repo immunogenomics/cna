@@ -3,12 +3,16 @@ import seaborn as sns
 import numpy as np
 import pandas as pd
 
-def umap(data, ix, c, alpha0=0.01, alpha1=0.1):
-    plt.scatter(*data.obsm['X_umap'].T, color='grey', s=3, alpha=alpha0)
-    plt.scatter(*data.obsm['X_umap'][ix].T, c=c[ix],
+def umap(data, ix, c, alpha0=0.01, alpha1=0.1, ax=None, colorbar=True):
+    if ax is None:
+        ax = plt.gca()
+    ax.scatter(*data.obsm['X_umap'].T, color='grey', s=3, alpha=alpha0)
+    ax.scatter(*data.obsm['X_umap'][ix].T, c=c[ix],
         vmin=-np.abs(c[ix]).max(), vmax=np.abs(c[ix]).max(),
         s=4, alpha=alpha1, cmap='seismic')
-    plt.colorbar()
+    if colorbar:
+        fig = plt.gcf()
+        fig.colorbar(ax=ax)
 
 def zhists(z, ts, overlays=[], propsig=None, **kwargs):
     df = pd.DataFrame(np.concatenate([z[t] for t in ts]), columns=['z'])
