@@ -14,7 +14,11 @@ def issorted(data, uns_samples='sampleXmeta', samplename='id', batchname='batch'
 
     # check that sorting of samples/batches in cell data matches that in sample data
     sampleXmeta = data.uns[uns_samples]
-    if not (data.obs[[samplename, batchname]].drop_duplicates().values == \
+    a = data.obs[[samplename, batchname]].drop_duplicates().values
+    b = sampleXmeta.reset_index()[[samplename, batchname]].values
+    if len(a) != len(b):
+        return False
+    elif not (data.obs[[samplename, batchname]].drop_duplicates().values == \
         sampleXmeta.reset_index()[[samplename, batchname]].values).all():
         return False
 
