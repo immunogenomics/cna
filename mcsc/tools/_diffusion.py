@@ -127,7 +127,7 @@ def diffusion(a, Y, C, B=None, T=None, s=None,
         if significance is None:
             fwer, fep95, fdr = type1errors(z_c, Nz_c)
             ntests = num_indep_tests(z_c, fwer)
-            fwer[fwer <= 0.05] = ntests*st.chi2.sf(z_c[fwer <= 0.05]**2, 1)
+            fwer[fwer <= 0.02] = ntests*st.chi2.sf(z_c[fwer <= 0.02]**2, 1)
             fwers.append(fwer)
             feps95.append(fep95)
             fdrs.append(fdr)
@@ -199,56 +199,3 @@ def diffusion(a, Y, C, B=None, T=None, s=None,
         np.squeeze(np.array(fdrs)), \
         np.squeeze(np.array(ts))
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    t = 0
-    h_c, Nz_c, std_c, z_c = process_step()
-    if outdetail > 0: print('t=0')
-    if keepevery is not None:
-        save_snapshot()
-
-    for t in range(1, maxsteps+1):
-        # take step
-        h_p = h_c
-        d_c = a.dot(d_c / colsums) + loops * d_c/colsums
-        Nd_c = a.dot(Nd_c / colsums[:,None]) + loops * Nd_c / colsums[:,None]
-
-        # compute z-scores and number of hits at 5% FWER
-        h_c, Nz_c, std_c, z_c = process_step()
-
-        # print progress
-        if outdetail > 0 and t % outfreq == 0:
-            print('t={:d} ({:.1f}s)'.format(t, time.time()-start))
-        if outdetail > 1:
-            print(h_c, 'hits,', (h_c-h_p)/(h_p+1), 'percent growth')
-
-        # decide whether to stop and whether to save current timestep
-        if stop_condition():
-            save_snapshot()
-            break
-        if keepevery is not None and t % keepevery == 0:
-            save_snapshot()
-
-    # save last timepoint if it isn't already saved
-    if t not in ts:
-        save_snapshot()
-
-    if outdetail > 0: print('t={:d}: finished'.format(t))
-
-    return np.array(zs).squeeze(), \
-        np.array(fwers).squeeze(), \
-        np.array(fdrs).squeeze(), \
-        np.array(feps95).squeeze(), \
-        np.array(ts).squeeze()

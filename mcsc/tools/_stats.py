@@ -103,9 +103,9 @@ def significant_fwer(z, znull, level, atol=1e-8, rtol=1e-5):
 def num_indep_tests(z, fwer):
     q = 0.05
     if (fwer <= q).sum() > 0:
-        p = np.ones(len(z))
-        p[fwer <= q] = st.chi2.sf(z[z**2 >= z2thresh], 1)
+        p = np.ones((fwer <= q).sum())
+        p = st.chi2.sf(z[fwer <= q]**2, 1)
 
-        return (fwer[fwer <= q] * p[fwer <= q]).sum() / (p[fwer <= q]**2).sum()
+        return (fwer[fwer <= q] * p).sum() / (p**2).sum()
     else:
         return None
