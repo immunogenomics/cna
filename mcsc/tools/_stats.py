@@ -1,4 +1,5 @@
 import numpy as np
+import scipy.stats as st
 
 def conditional_permutation(B, Y, num):
     """
@@ -15,7 +16,7 @@ def conditional_permutation(B, Y, num):
         ])
     return Y[ix]
 
-def tail_counts(z, znull):
+def tail_counts(z, znull, atol=1e-8, rtol=1e-5):
     """
     Computes the number of null z-scores of equal or greater magnitude than each supplied
         z-score, for each null instantiation.
@@ -32,7 +33,7 @@ def tail_counts(z, znull):
     ix = np.argsort(z2); iix = np.argsort(ix)
 
     # ask numpy to make a histogram with sorted squared z-scores as boundaries
-    bins = np.concatenate([z2[ix], [np.inf]])
+    bins = np.concatenate([z2[ix] - atol - rtol*z2[ix], [np.inf]])
     hist = np.array([
             np.histogram(zn2, bins=bins)[0]
         for zn2 in znull.T**2])
@@ -51,47 +52,60 @@ def type1errors(z, znull):
         null instantiations.
     """
     # get tail counts
+    if znull.shape[0] != len(z):
+        print('ERROR: znull is shape', znull.shape, 'and z is shape', z.shape)
     tails = tail_counts(z, znull)
     ranks = len(z) - np.argsort(np.argsort(z**2))
 
     # compute FWERs
-    fwer = (tails > 0).mean(axis=0)
+    fwer = ((tails > 0).sum(axis=0) + 1) / (znull.shape[1] + 1)
 
     # compute FDPs
     fdp = tails / ranks
     fdr = fdp.mean(axis=0)
-    fep95 = np.percentile(fdp, 95, axis=0)
+    fep95 = np.percentile(fdp, 95, axis=0, interpolation='higher')
 
     return fwer, fep95, fdr
 
-def significant_fwer(z, znull, level):
+def significant_fwer(z, znull, level, atol=1e-8, rtol=1e-5):
     level = np.array(level)
+    maxs = np.max(znull**2, axis=0)
     thresholds = np.percentile(
-        np.max(znull**2, axis=0),
-        100*(1-level))
+        maxs,
+        100*(1-level),
+        interpolation='higher')
 
     if len(thresholds.shape) == 0:
-        return z**2 >= thresholds
+        return z**2 - thresholds > (atol + rtol*thresholds) # analogous to np.allclose
     else:
         return np.array([
-            z**2 >= thresh
+            z**2 - thresh > (atol + rtol*thresh) # analogous to np.allclose
             for thresh in thresholds]).T
 
+#def significant_fwer_loo(z, level, atol=1e-8, rtol=1e-5):
+#    level = np.array(level)
+#    maxs = np.max(z**2, axis=0)
+#
+#    ix = np.arange(len(maxs))
+#    loo = np.array([
+#        maxs[ix != i]
+#        for i in ix
+#        ])
+#    thresholds = np.percentile(loo, 100*(1-level), axis=1, interpolation='higher')
+#
+#    if len(thresholds.shape) <= 1:
+#        return z**2 - thresholds > (atol + rtol*thresholds) # analogous to np.allclose
+#    else:
+#        return np.array([
+#            z**2 - thresh > (atol + rtol*thresh) # analogous to np.allclose
+#            for thresh in thresholds]).T
 
+def num_indep_tests(z, fwer):
+    q = 0.05
+    if (fwer <= q).sum() > 0:
+        p = np.ones(len(z))
+        p[fwer <= q] = st.chi2.sf(z[z**2 >= z2thresh], 1)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        return (fwer[fwer <= q] * p[fwer <= q]).sum() / (p[fwer <= q]**2).sum()
+    else:
+        return None
