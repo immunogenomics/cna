@@ -43,4 +43,5 @@ DATASETS
 - Ebola data set? talk to dylan
 - V2F iPSC data set? (single cell + cell morphology via cellpainter; maybe later)
 - (Non-single-cell data sets?)
+- scATAC motif enrichment? cellular phenotype = degree of enrichment of a motif in scATAC peaks. See if there are coherent areas of umap space in which cells tend to be especially enriched in this motif
 
