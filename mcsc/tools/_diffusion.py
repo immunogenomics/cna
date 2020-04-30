@@ -107,10 +107,10 @@ def diffusion_minfwer(a, Y, C, B=None, T=None, s=None,
     Nntests = np.array([numtests_loo(Nmaxz2_) for Nmaxz2_ in Nmaxz2])
     t_f = np.argmin(st.chi2.sf((z**2).max(axis=1), 1) * ntests)
     z_f = z[t_f]
-    Ncorrectedmaxz2 = st.chi2.isf(
-            Nntests * st.chi2.sf(Nmaxz2, 1),
-            1)
-    Nt_f = np.argmax(Ncorrectedmaxz2, axis=0)
+
+    Nt_f = np.argmin(
+            st.chi2.sf(Nmaxz2, 1) * Nntests,
+            axis=0)
     Nz2_f = np.array([Nmaxz2[Nt_f[i], i] for i in range(Nnull)])
     fwer = empirical_fwers(z[t_f], Nz2_f)
 
