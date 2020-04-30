@@ -67,45 +67,24 @@ def type1errors(z, znull):
 
     return fwer, fep95, fdr
 
-def significant_fwer(z, znull, level, atol=1e-8, rtol=1e-5):
-    level = np.array(level)
-    maxs = np.max(znull**2, axis=0)
-    thresholds = np.percentile(
-        maxs,
-        100*(1-level),
-        interpolation='higher')
+def empirical_fwers(z, Nmaxz2, atol=1e-8, rtol=1e-5):
+    # Nmaxz2 is assumed to be of length k where k is number of null simulates
+    tc = tail_counts(z, np.sqrt(Nmaxz2), atol=atol, rtol=rtol)[0]
+    return (tc + 1)/(len(Nmaxz2)+1)
 
-    if len(thresholds.shape) == 0:
-        return z**2 - thresholds > (atol + rtol*thresholds) # analogous to np.allclose
-    else:
-        return np.array([
-            z**2 - thresh > (atol + rtol*thresh) # analogous to np.allclose
-            for thresh in thresholds]).T
+def minfwer_loo(Nmaxz2, atol=1e-8, rtol=1e-5):
+    tc = np.array([(Nmaxz2 >= z2).sum() for z2 in Nmaxz2])
+    return (tc + 1)/len(Nmaxz2)
 
-#def significant_fwer_loo(z, level, atol=1e-8, rtol=1e-5):
-#    level = np.array(level)
-#    maxs = np.max(z**2, axis=0)
-#
-#    ix = np.arange(len(maxs))
-#    loo = np.array([
-#        maxs[ix != i]
-#        for i in ix
-#        ])
-#    thresholds = np.percentile(loo, 100*(1-level), axis=1, interpolation='higher')
-#
-#    if len(thresholds.shape) <= 1:
-#        return z**2 - thresholds > (atol + rtol*thresholds) # analogous to np.allclose
-#    else:
-#        return np.array([
-#            z**2 - thresh > (atol + rtol*thresh) # analogous to np.allclose
-#            for thresh in thresholds]).T
+def numtests(Nmaxz2):
+    j, k = 0, 10
+    maxs = np.sort(Nmaxz2)[::-1]
+    fwers = (np.arange(j, k)+1)/(len(maxs)+1)
+    ps = st.chi2.sf(maxs[j:k], 1)
+    return 1/(ps.dot(fwers) / fwers.dot(fwers))
 
-def num_indep_tests(z, fwer):
-    q = 0.05
-    if (fwer <= q).sum() > 0:
-        p = np.ones((fwer <= q).sum())
-        p = st.chi2.sf(z[fwer <= q]**2, 1)
-
-        return (fwer[fwer <= q] * p).sum() / (p**2).sum()
-    else:
-        return None
+def numtests_loo(Nmaxz2):
+    return np.array([
+        numtests(Nmaxz2[np.arange(len(Nmaxz2)) != i])
+        for i in range(len(Nmaxz2))
+        ])

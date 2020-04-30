@@ -1,7 +1,7 @@
 import numpy as np
 import scipy.stats as st
 from ._stats import conditional_permutation, type1errors, \
-    significant_fwer, num_indep_tests
+    empirical_fwers, minfwer_loo, numtests, numtests_loo
 import time
 
 def prepare(B, C, s, T, Y): # see analyze(..) for parameter descriptions
@@ -50,13 +50,286 @@ def get_null(B, C, u, w, Y, num):
 
     return nully
 
-def diffusion(a, Y, C, B=None, T=None, s=None,
+def diffusion_minfwer(a, Y, C, B=None, T=None, s=None,
+        diffusion=True,
+        maxsteps=50, loops=1,
+        Nnull=100, seed=0,
+        outdetail=1, outfreq=5):
+    if seed is not None:
+        np.random.seed(seed)
+
+    # prepare data
+    B, u, w, y = prepare(B, C, s, T, Y)
+    colsums = np.array(a.sum(axis=0)).flatten() + loops
+
+    # initialize time 0 of random walk. Naming conventions:
+    #   d = raw diffusion scores, z = z-scores, h = number of hits
+    #   *_c = current, *_p = previous, N* = null
+    d_c = y
+    Nd_c = get_null(B, C, u, w, Y, Nnull)
+    z = list()#np.zeros((maxsteps+1, len(d_c)))
+    Nmaxz2 = list()#np.zeros((maxsteps+1, Nnull))
+
+    # do diffusion
+    t = 0
+    start = time.time()
+    if outdetail > 0: print('t = 0')
+    for t in range(1, maxsteps+1):
+        # take step
+        if diffusion:
+            d_c = a.dot(d_c / colsums) + loops * d_c/colsums
+            Nd_c = a.dot(Nd_c / colsums[:,None]) + loops * Nd_c / colsums[:,None]
+        else:
+            d_c = a.dot(d_c) / colsums + loops * d_c/colsums
+            Nd_c = a.dot(Nd_c) / colsums[:,None] + loops * Nd_c / colsums[:,None]
+
+        # compute z-scores
+        # compute standard deviations under null for each cell
+        Nd_c2 = Nd_c**2
+        Nd_c2sum = Nd_c2.sum(axis=1)
+        std_c = np.sqrt(Nd_c2sum / Nnull)
+        std_c_loo = np.sqrt(
+            (Nd_c2sum[:,None] - Nd_c2) / (Nnull-1)
+            )
+        # compute z-scores
+        z.append(d_c / std_c)
+        Nmaxz2.append(((Nd_c / std_c_loo)**2).max(axis=0))
+
+        # print progress
+        if outdetail > 0 and t % outfreq == 0:
+            print('t={:d} ({:.1f}s)'.format(t, time.time()-start))
+    if outdetail > 0: print('t={:d}: finished'.format(t))
+
+    z = np.array(z)
+    Nmaxz2 = np.array(Nmaxz2)
+
+    ntests = np.array([numtests(Nmaxz2_) for Nmaxz2_ in Nmaxz2])
+    Nntests = np.array([numtests_loo(Nmaxz2_) for Nmaxz2_ in Nmaxz2])
+    t_f = np.argmin(st.chi2.sf((z**2).max(axis=1), 1) * ntests)
+    z_f = z[t_f]
+    Ncorrectedmaxz2 = st.chi2.isf(
+            Nntests * st.chi2.sf(Nmaxz2, 1),
+            1)
+    Nt_f = np.argmax(Ncorrectedmaxz2, axis=0)
+    Nz2_f = np.array([Nmaxz2[Nt_f[i], i] for i in range(Nnull)])
+    fwer = empirical_fwers(z[t_f], Nz2_f)
+
+    if outdetail > 0:
+        print('max z2:', (z[t_f]**2).max())
+        print('min p:', st.chi2.sf((z[t_f]**2).max(), 1))
+        print('min padj:', ntests[t_f]*st.chi2.sf((z[t_f]**2).max(), 1))
+        print('min fwer:', fwer.min())
+
+    return z[t_f], \
+        fwer, \
+        numtests(Nz2_f), \
+        t_f + 1, \
+        Nt_f
+
+def diffusion_pvalratio(a, Y, C, B=None, T=None, s=None,
+        diffusion=True,
+        maxsteps=50, loops=1,
+        pvalratio=0.95,
+        Nnull=100, seed=0,
+        outdetail=1, outfreq=5):
+    if seed is not None:
+        np.random.seed(seed)
+
+    # prepare data
+    B, u, w, y = prepare(B, C, s, T, Y)
+    colsums = np.array(a.sum(axis=0)).flatten() + loops
+
+    # initialize time 0 of random walk. Naming conventions:
+    #   d = raw diffusion scores, z = z-scores, h = number of hits
+    #   *_c = current, *_p = previous, N* = null
+    d_c = y
+    Nd_c = get_null(B, C, u, w, Y, Nnull)
+    z = np.zeros((maxsteps+1, len(d_c)))
+    Nmaxz2 = np.zeros((maxsteps+1, Nnull))
+
+    minp = 10 * np.ones(maxsteps+1)
+    ntests = np.ones(maxsteps+1)
+
+    # do diffusion
+    t = 0
+    start = time.time()
+    if outdetail > 0: print('t = 0')
+    for t in range(1, maxsteps+1):
+        # take step
+        if diffusion:
+            d_c = a.dot(d_c / colsums) + loops * d_c/colsums
+            Nd_c = a.dot(Nd_c / colsums[:,None]) + loops * Nd_c / colsums[:,None]
+        else:
+            d_c = a.dot(d_c) / colsums + loops * d_c/colsums
+            Nd_c = a.dot(Nd_c) / colsums[:,None] + loops * Nd_c / colsums[:,None]
+
+        # compute z-scores
+        # compute standard deviations under null for each cell
+        Nd_c2 = Nd_c**2
+        Nd_c2sum = Nd_c2.sum(axis=1)
+        std_c = np.sqrt(Nd_c2sum / Nnull)
+        std_c_loo = np.sqrt(
+            (Nd_c2sum[:,None] - Nd_c2) / (Nnull-1)
+            )
+        # compute z-scores
+        z[t] = d_c / std_c
+        Nmaxz2[t] = ((Nd_c / std_c_loo)**2).max(axis=0)
+
+        ntests[t] = numtests(Nmaxz2[t])
+        minp[t] = st.chi2.sf((z[t]**2).max(), 1)
+
+        # print progress
+        if outdetail > 0 and t % outfreq == 0:
+            print('t={:d} ({:.1f}s)'.format(t, time.time()-start))
+
+        # stop
+        t0 = max(t-5, 0)
+        ratio = minp[t]*ntests[t] / (minp[t0]*ntests[t0])
+        print(minp[t]*ntests[t], ratio)
+        if ratio > pvalratio:
+            t = t0
+            break
+    if outdetail > 0: print('t={:d}: finished'.format(t))
+
+    if outdetail > 0:
+        print('max z2:', (z[t]**2).max())
+        print('min p:', st.chi2.sf((z[t]**2).max(), 1))
+        print('min padj:', ntests[t]*st.chi2.sf((z[t]**2).max(), 1))
+
+    return z[t], \
+        empirical_fwers(z[t], Nmaxz2[t]), \
+        ntests[t], \
+        t
+
+def diffusion_expgrowth(a, Y, C, B=None, T=None, s=None,
+        diffusion=True,
         maxsteps=50, loops=1,
         growthreq=0.05, nontrivial=100,
         keepevery=None,
         significance=None,
         Nnull=100, seed=0,
         outdetail=1, outfreq=5):
+    def process_step():
+        # compute standard deviations under null for each cell
+        Nd_c2 = Nd_c**2
+        Nd_c2sum = Nd_c2.sum(axis=1)
+        std_c = np.sqrt(Nd_c2sum / Nnull)
+        std_c_loo = np.sqrt(
+            (Nd_c2sum[:,None] - Nd_c2) / (Nnull-1)
+            )
+        # compute z-scores
+        z_c = d_c / std_c
+        Nz_c = Nd_c / std_c_loo
+        # compute number of hits
+        Nmaxz2 = (Nz_c**2).max(axis=0)
+        fwer = empirical_fwers(z_c, Nmaxz2)
+        h_c = (fwer <= 0.05).sum()
+        return z_c, Nz_c, h_c
+    def stop_condition():
+        # the +1 below avoids a numpy warning without meaningfully changing results
+        if growthreq is None:
+            return False
+        else:
+            return h_p >= nontrivial and (h_c-h_p+1) / (h_p+1) < growthreq
+    #TODO: significance shouldn't be performed inside save_snapshot
+    def save_snapshot():
+        ts.append(t)
+        ds.append(d_c)
+        zs.append(z_c)
+        if significance is None:
+            #fwer, fep95, fdr = type1errors(z_c, Nz_c)
+            Nmaxz2 = (Nz_c**2).max(axis=0)
+            fwer, fep95, fdr = empirical_fwers(z_c, Nmaxz2), None, None
+
+            ntests.append(numtests(Nmaxz2))
+            #fwer[fwer <= 0.02] = ntests*st.chi2.sf(z_c[fwer <= 0.02]**2, 1)
+            fwers.append(fwer)
+            feps95.append(fep95)
+            fdrs.append(fdr)
+        else:
+            hits = significant_fwer(z_c, Nz_c, significance)
+            fwers.append(hits)
+
+    if seed is not None:
+        np.random.seed(seed)
+    if significance is not None:
+        significance = np.array(significance)
+
+    # prepare data
+    B, u, w, y = prepare(B, C, s, T, Y)
+    colsums = np.array(a.sum(axis=0)).flatten() + loops
+
+    # initialize results
+    ts, ds, zs, fwers, feps95, fdrs = list(), list(), list(), list(), list(), list()
+    ntests = list()
+
+    # initialize time 0 of random walk. Naming conventions:
+    #   d = raw diffusion scores, z = z-scores, h = number of hits
+    #   *_c = current, *_p = previous, N* = null
+    d_c = y
+    Nd_c = get_null(B, C, u, w, Y, Nnull)
+    z_c = np.zeros(d_c.shape)
+    Nz_c = np.zeros(Nd_c.shape)
+    h_c, h_p = 0, 0
+
+    # do diffusion
+    t = 0
+    start = time.time()
+    if outdetail > 0: print('t = 0')
+    if keepevery is not None:
+        save_snapshot()
+    for t in range(1, maxsteps+1):
+        # take step
+        if diffusion:
+            d_c = a.dot(d_c / colsums) + loops * d_c/colsums
+            Nd_c = a.dot(Nd_c / colsums[:,None]) + loops * Nd_c / colsums[:,None]
+        else:
+            d_c = a.dot(d_c) / colsums + loops * d_c/colsums
+            Nd_c = a.dot(Nd_c) / colsums[:,None] + loops * Nd_c / colsums[:,None]
+
+        # compute z-scores
+        h_p = h_c
+        z_c, Nz_c, h_c = process_step()
+
+        # print progress
+        if outdetail > 0 and t % outfreq == 0:
+            print('t={:d} ({:.1f}s)'.format(t, time.time()-start))
+        if outdetail > 1:
+            ntests = num_indep_tests_fast(Nz_c)
+            zmax = np.max(z_c**2)
+            pmin = st.chi2.sf(zmax, 1)
+            padj = pmin*ntests
+            print('\t{} hits, {:.2f} rel growth, max z2 {:.1f} ({:.2e}) (({:.2e}))'.format(
+                h_c, (h_c-h_p+1)/(h_p+1),
+                zmax,
+                pmin,
+                padj
+                ))
+
+        # decide whether to stop and whether to save current timestep
+        if keepevery is not None and t % keepevery == 0:
+            save_snapshot()
+        if stop_condition():
+            break
+    if outdetail > 0: print('t={:d}: finished'.format(t))
+
+    # save last timepoint if it isn't already saved
+    if t not in ts:
+        save_snapshot()
+
+    if outdetail > 0:
+        print('max z2:', (z_c**2).max())
+        print('min p:', st.chi2.sf((z_c**2).max(), 1))
+        print('min padj:', fwers[-1].min())
+
+    return np.squeeze(np.array(zs)), \
+        np.squeeze(np.array(fwers)), \
+        np.squeeze(np.array(feps95)), \
+        np.squeeze(np.array(fdrs)), \
+        np.squeeze(np.array(ntests)), \
+        np.squeeze(np.array(ts))
+
+
     """
     Carries out multi-condition analysis using diffusion.
 
@@ -99,103 +372,6 @@ def diffusion(a, Y, C, B=None, T=None, s=None,
         array will be empty
     0d/1d array: the set of timepoints corresponding to the returned results
     """
-    def process_step():
-        # compute standard deviations under null for each cell
-        Nd_c2 = Nd_c**2
-        Nd_c2sum = Nd_c2.sum(axis=1)
-        std_c = np.sqrt(Nd_c2sum / Nnull)
-        std_c_loo = np.sqrt(
-            (Nd_c2sum[:,None] - Nd_c2) / (Nnull-1)
-            )
-        # compute z-scores
-        z_c = d_c / std_c
-        Nz_c = Nd_c / std_c_loo
-        # compute number of hits
-        h_c = significant_fwer(z_c, Nz_c, 0.05).sum()
-        return z_c, Nz_c, h_c
-    def stop_condition():
-        # the +1 below avoids a numpy warning without meaningfully changing results
-        if growthreq is None:
-            return False
-        else:
-            return h_p >= nontrivial and (h_c-h_p+1) / (h_p+1) < growthreq
-    #TODO: significance shouldn't be performed inside save_snapshot
-    def save_snapshot():
-        ts.append(t)
-        ds.append(d_c)
-        zs.append(z_c)
-        if significance is None:
-            fwer, fep95, fdr = type1errors(z_c, Nz_c)
-            ntests = num_indep_tests(z_c, fwer)
-            fwer[fwer <= 0.02] = ntests*st.chi2.sf(z_c[fwer <= 0.02]**2, 1)
-            fwers.append(fwer)
-            feps95.append(fep95)
-            fdrs.append(fdr)
-        else:
-            hits = significant_fwer(z_c, Nz_c, significance)
-            fwers.append(hits)
 
-    if seed is not None:
-        np.random.seed(seed)
-    if significance is not None:
-        significance = np.array(significance)
-
-    # prepare data
-    B, u, w, y = prepare(B, C, s, T, Y)
-    colsums = np.array(a.sum(axis=0)).flatten() + loops
-
-    # initialize results
-    ts, ds, zs, fwers, feps95, fdrs = list(), list(), list(), list(), list(), list()
-
-    # initialize time 0 of random walk. Naming conventions:
-    #   d = raw diffusion scores, z = z-scores, h = number of hits
-    #   *_c = current, *_p = previous, N* = null
-    d_c = y
-    Nd_c = get_null(B, C, u, w, Y, Nnull)
-    z_c = np.zeros(d_c.shape)
-    Nz_c = np.zeros(Nd_c.shape)
-    h_c, h_p = 0, 0
-
-    # do diffusion
-    t = 0
-    start = time.time()
-    if outdetail > 0: print('t = 0')
-    if keepevery is not None:
-        save_snapshot()
-    for t in range(1, maxsteps+1):
-        # take step
-        d_c = a.dot(d_c / colsums) + loops * d_c/colsums
-        Nd_c = a.dot(Nd_c / colsums[:,None]) + loops * Nd_c / colsums[:,None]
-
-        # compute z-scores
-        h_p = h_c
-        z_c, Nz_c, h_c = process_step()
-
-        # print progress
-        if outdetail > 0 and t % outfreq == 0:
-            print('t={:d} ({:.1f}s)'.format(t, time.time()-start))
-        if outdetail > 1:
-            print('\t', h_c, 'hits,', (h_c-h_p+1)/(h_p+1), 'relative growth')
-
-        # decide whether to stop and whether to save current timestep
-        if keepevery is not None and t % keepevery == 0:
-            save_snapshot()
-        if stop_condition():
-            break
-    if outdetail > 0: print('t={:d}: finished'.format(t))
-
-    # save last timepoint if it isn't already saved
-    if t not in ts:
-        save_snapshot()
-
-    if outdetail > 0:
-        print('max z2:', (z_c**2).max())
-        print('min p:', st.chi2.sf((z_c**2).max(), 1))
-        print('min padj:', fwers[-1].min())
-
-    return np.squeeze(np.array(zs)), \
-        np.squeeze(np.array(fwers)), \
-        np.squeeze(np.array(feps95)), \
-        np.squeeze(np.array(fdrs)), \
-        np.squeeze(np.array(ts))
-
+def diffusion():
+    pass
