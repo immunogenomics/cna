@@ -149,7 +149,7 @@ def diffusion_expgrowth(a, Y, C, B=None, T=None, s=None,
         Nmaxz2 = (Nz_c**2).max(axis=0)
         fwer = empirical_fwers(z_c, Nmaxz2)
         h_c = (fwer <= 0.05).sum()
-        return z_c, Nz_c, h_c
+        return z_c, Nz_c, h_c, Nmaxz2
     def stop_condition():
         # the +1 below avoids a numpy warning without meaningfully changing results
         if growthreq is None:
@@ -214,13 +214,13 @@ def diffusion_expgrowth(a, Y, C, B=None, T=None, s=None,
 
         # compute z-scores
         h_p = h_c
-        z_c, Nz_c, h_c = process_step()
+        z_c, Nz_c, h_c, Nmaxz2 = process_step()
 
         # print progress
         if outdetail > 0 and t % outfreq == 0:
             print('t={:d} ({:.1f}s)'.format(t, time.time()-start))
         if outdetail > 1:
-            ntests = num_indep_tests_fast(Nz_c)
+            ntests = numtests(Nmaxz2)
             zmax = np.max(z_c**2)
             pmin = st.chi2.sf(zmax, 1)
             padj = pmin*ntests
@@ -245,7 +245,10 @@ def diffusion_expgrowth(a, Y, C, B=None, T=None, s=None,
     if outdetail > 0:
         print('max z2:', (z_c**2).max())
         print('min p:', st.chi2.sf((z_c**2).max(), 1))
-        print('min padj:', fwers[-1].min())
+        print('ntests:', ntests[-1])
+        print('minp * ntests:', st.chi2.sf((z_c**2).max(), 1)*ntests[-1])
+        print('min fwer:', fwers[-1].min())
+        print('nsig:', (fwers[-1] <= 0.05).sum())
 
     return np.squeeze(np.array(zs)), \
         np.squeeze(np.array(fwers)), \
