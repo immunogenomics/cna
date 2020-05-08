@@ -220,10 +220,10 @@ def diffusion_expgrowth(a, Y, C, B=None, T=None, s=None,
         if outdetail > 0 and t % outfreq == 0:
             print('t={:d} ({:.1f}s)'.format(t, time.time()-start))
         if outdetail > 1:
-            ntests = numtests(Nmaxz2)
+            nt = numtests(Nmaxz2)
             zmax = np.max(z_c**2)
             pmin = st.chi2.sf(zmax, 1)
-            padj = pmin*ntests
+            padj = pmin*nt
             print('\t{} hits, {:.2f} rel growth, max z2 {:.1f} ({:.2e}) (({:.2e}))'.format(
                 h_c, (h_c-h_p+1)/(h_p+1),
                 zmax,
