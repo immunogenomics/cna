@@ -46,7 +46,7 @@ def tail_counts(z, znull, atol=1e-8, rtol=1e-5):
     # return tail counts for un-sorted z-scores
     return tails[:, iix]
 
-def type1errors(z, znull):
+def empirical_fdrs(z, znull):
     """
     znull is assumed to be of shape len(z) x k, where k is the number of
         null instantiations.
@@ -57,15 +57,15 @@ def type1errors(z, znull):
     tails = tail_counts(z, znull)
     ranks = len(z) - np.argsort(np.argsort(z**2))
 
-    # compute FWERs
-    fwer = ((tails > 0).sum(axis=0) + 1) / (znull.shape[1] + 1)
+    # compute FWER (superceded by empirical_fwers)
+    #fwer = ((tails > 0).sum(axis=0) + 1) / (znull.shape[1] + 1)
 
     # compute FDPs
     fdp = tails / ranks
     fdr = fdp.mean(axis=0)
-    fep95 = np.percentile(fdp, 95, axis=0, interpolation='higher')
+    #fep95 = np.percentile(fdp, 95, axis=0, interpolation='higher')
 
-    return fwer, fep95, fdr
+    return fdr
 
 def empirical_fwers(z, Nmaxz2, atol=1e-8, rtol=1e-5):
     # Nmaxz2 is assumed to be of length k where k is number of null simulates

@@ -1,6 +1,6 @@
 import numpy as np
 import scipy.stats as st
-from ._stats import conditional_permutation, type1errors, \
+from ._stats import conditional_permutation, empirical_fdrs, \
     empirical_fwers, minfwer_loo, numtests, numtests_loo
 import time
 
@@ -129,6 +129,7 @@ def diffusion_minfwer(a, Y, C, B=None, T=None, s=None,
 def diffusion_expgrowth(a, Y, C, B=None, T=None, s=None,
         diffusion=True,
         maxsteps=50, loops=1,
+        skip_fdr=True,
         growthreq=0.05, nontrivial=100,
         keepevery=None,
         significance=None,
@@ -162,18 +163,13 @@ def diffusion_expgrowth(a, Y, C, B=None, T=None, s=None,
         ds.append(d_c)
         zs.append(z_c)
         if significance is None:
-            #fwer, fep95, fdr = type1errors(z_c, Nz_c)
             Nmaxz2 = (Nz_c**2).max(axis=0)
-            fwer, fep95, fdr = empirical_fwers(z_c, Nmaxz2), None, None
-
             ntests.append(numtests(Nmaxz2))
-            #fwer[fwer <= 0.02] = ntests*st.chi2.sf(z_c[fwer <= 0.02]**2, 1)
-            fwers.append(fwer)
-            feps95.append(fep95)
-            fdrs.append(fdr)
+            fwers.append(empirical_fwers(z_c, Nmaxz2))
+            if not skip_fdr:
+                fdrs.append(empirical_fdrs(z_c, Nz_c))
         else:
-            hits = significant_fwer(z_c, Nz_c, significance)
-            fwers.append(hits)
+            fwers.append(significant_fwer(z_c, Nz_c, significance))
 
     if seed is not None:
         np.random.seed(seed)
@@ -185,7 +181,7 @@ def diffusion_expgrowth(a, Y, C, B=None, T=None, s=None,
     colsums = np.array(a.sum(axis=0)).flatten() + loops
 
     # initialize results
-    ts, ds, zs, fwers, feps95, fdrs = list(), list(), list(), list(), list(), list()
+    ts, ds, zs, fwers, fdrs = list(), list(), list(), list(), list()
     ntests = list()
 
     # initialize time 0 of random walk. Naming conventions:
@@ -252,7 +248,6 @@ def diffusion_expgrowth(a, Y, C, B=None, T=None, s=None,
 
     return np.squeeze(np.array(zs)), \
         np.squeeze(np.array(fwers)), \
-        np.squeeze(np.array(feps95)), \
         np.squeeze(np.array(fdrs)), \
         np.squeeze(np.array(ntests)), \
         np.squeeze(np.array(ts))
