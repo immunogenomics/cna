@@ -15,7 +15,7 @@ def sortedcopy(data, uns_samples='sampleXmeta', samplename='id'):
 
     if uns_samples in data.uns:
         ix = np.argsort(data.uns[uns_samples].index.values.astype(str))
-        data.uns[uns_samples] = data.uns[uns_samples].iloc[ix]
+        data.uns[uns_samples] = data.uns[uns_samples].iloc[ix].copy()
 
     return data
 
