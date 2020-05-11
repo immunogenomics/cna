@@ -1,7 +1,7 @@
 import numpy as np
 from sklearn.utils.extmath import randomized_svd
 import scipy.stats as st
-from ._stats import conditional_permutation, type1errors
+from ._stats import conditional_permutation
 import time
 
 def std(X):

@@ -3,18 +3,17 @@ import scipy.stats as st
 
 def conditional_permutation(B, Y, num):
     """
-    Permutes Y conditioned on B num different times. Note: this function assumes that B is
-    sorted.
+    Permutes Y conditioned on B num different times.
     """
-    starts = np.concatenate([
-        [0],
-        np.where(B[:-1] != B[1:])[0] + 1,
-        [len(B)]])
-    ix = np.concatenate([
-        np.argsort(np.random.randn(j-i, num), axis=0) + i
-        for i, j in zip(starts[:-1], starts[1:])
+    batchind = np.array([
+        np.where(B == b)[0] for b in np.unique(B)
         ])
-    return Y[ix]
+    ix = np.concatenate([
+        bi[np.argsort(np.random.randn(len(bi), num), axis=0)]
+        for bi in batchind
+        ])
+    bix = ix[np.concatenate(batchind)]
+    return Y[bix]
 
 def tail_counts(z, znull, atol=1e-8, rtol=1e-5):
     """

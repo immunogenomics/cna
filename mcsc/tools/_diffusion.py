@@ -9,9 +9,10 @@ def prepare(B, C, s, T, Y): # see analyze(..) for parameter descriptions
     if B is None:
         B = np.ones(len(Y))
 
-    # verify samples are sorted by batch (for null permutation)
-    if any(np.diff(B) < 0):
-        print('ERROR: samples must be sorted by batch')
+    # verify cells are sorted by sample (required for going btwn sample-level and cell-level)
+    #TODO: we have to refactor so that this package takes an anndata object as input
+    if False:
+        print('ERROR: cells must be sorted by sample and line up with sample metadata')
 
     # add batch indicators to sample-level covariates
     batchvalues = np.unique(B)
