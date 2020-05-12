@@ -2,7 +2,7 @@ import numpy as np
 import scipy.stats as st
 from ._stats import conditional_permutation, empirical_fdrs, \
     empirical_fwers, minfwer_loo, numtests, numtests_loo
-import time
+import time, gc
 
 def prepare(B, C, s, T, Y): # see analyze(..) for parameter descriptions
     # add dummy batch info if none supplied
@@ -246,6 +246,9 @@ def diffusion_expgrowth(a, Y, C, B=None, T=None, s=None,
         print('minp * ntests:', st.chi2.sf((z_c**2).max(), 1)*ntests[-1])
         print('min fwer:', fwers[-1].min())
         print('nsig:', (fwers[-1] <= 0.05).sum())
+
+    del Nd_c, Nz_c
+    gc.collect()
 
     return np.squeeze(np.array(zs)), \
         np.squeeze(np.array(fwers)), \
