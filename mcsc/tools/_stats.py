@@ -12,7 +12,9 @@ def conditional_permutation(B, Y, num):
         bi[np.argsort(np.random.randn(len(bi), num), axis=0)]
         for bi in batchind
         ])
-    bix = ix[np.concatenate(batchind)]
+    bix = np.zeros((len(Y), num)).astype(np.int)
+    bix[np.concatenate(batchind)] = ix
+    result = Y[bix]
     return Y[bix]
 
 def tail_counts(z, znull, atol=1e-8, rtol=1e-5):
