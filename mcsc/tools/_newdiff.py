@@ -51,6 +51,76 @@ def get_null(B, C, u, w, Y, num):
 
     return nully
 
+def blockjack(X, y, g):
+    X = X - X.mean(axis=1)[:,None]
+    y = y - y.mean()
+    numerators = X.T * y
+    denominators = (X.T)**2
+    theta = numerators.sum(axis=1)/denominators.sum(axis=1)
+
+    loo = np.array([g != g_ for g_ in np.unique(g)])
+    m = np.array([(g==g_).sum() for g_ in np.unique(g)])
+    n = m.sum()
+    h = n/m
+
+    theta_j = np.array([
+		numerators[:,loo_].sum(axis=1) / denominators[:,loo_].sum(axis=1)
+		for loo_ in loo])
+    theta_J = (theta - theta_j).sum(axis=0) + m.dot(theta_j) / n
+
+    tau = np.outer(h, theta) - (h-1)[:,None]*theta_j
+
+    sigma2 = 1/len(g) * ((tau - theta_J)**2 / (h-1)[:,None]).sum(axis=0)
+    z = theta_J / np.sqrt(sigma2)
+
+    return z
+
+def nns(a, C, maxsteps=5):
+    colsums = np.array(a.sum(axis=0)).flatten() + 1
+    s = np.repeat(np.eye(len(C)), C, axis=0)
+
+    for i in range(maxsteps):
+        if i % 1 == 0:
+            print(i)
+        s = a.dot(s/colsums[:,None]) + s/colsums[:,None]
+    snorm = s / C
+    return snorm
+
+def nnreg(a, Y, C, B=None, T=None, s=None,
+    maxsteps=50, Nnull=100, seed=0):
+    if seed is not None:
+        np.random.seed(seed)
+
+    colsums = np.array(a.sum(axis=0)).flatten() + 1
+    NY = conditional_permutation(B, Y.astype(np.float64), Nnull).T
+    print(NY.shape)
+
+    s = np.repeat(np.eye(len(Y)), C, axis=0)
+
+    for i in range(maxsteps):
+        if i % 1 == 0:
+            print(i)
+        s = a.dot(s/colsums[:,None]) + s/colsums[:,None]
+        snorm = s / C
+
+    z = blockjack(snorm.T, Y, B)
+    print('jackknifing nulls')
+    Nz = np.array([
+        blockjack(snorm.T, ny, B)
+        for ny in NY])
+    Nmaxz2 = (Nz**2).max(axis=1)
+    fwer = empirical_fwers(z, Nmaxz2)
+
+    print('max null z2:', Nmaxz2.max())
+    print('max z2:', (z**2).max())
+    print('ratio:', (z**2).max() / Nmaxz2.max())
+
+    return z, fwer, Nmaxz2
+
+
+
+################
+
 def diffusion_minfwer(a, Y, C, B=None, T=None, s=None,
         diffusion=True,
         maxsteps=50, loops=1,
@@ -150,7 +220,6 @@ def diffusion_expgrowth(a, Y, C, B=None, T=None, s=None,
         # compute number of hits
         Nmaxz2 = (Nz_c**2).max(axis=0)
         fwer = empirical_fwers(z_c, Nmaxz2)
-        #fdr = empirical_fdrs(z_c, Nmaxz2)
         h_c = (fwer <= 0.05).sum()
         return z_c, Nz_c, h_c, Nmaxz2
     def stop_condition():
@@ -194,6 +263,7 @@ def diffusion_expgrowth(a, Y, C, B=None, T=None, s=None,
     z_c = np.zeros(d_c.shape)
     Nz_c = np.zeros(Nd_c.shape)
     h_c, h_p = 0, 0
+    Nmaxz2s = list()
 
     # do diffusion
     t = 0
@@ -213,6 +283,7 @@ def diffusion_expgrowth(a, Y, C, B=None, T=None, s=None,
         # compute z-scores
         h_p = h_c
         z_c, Nz_c, h_c, Nmaxz2 = process_step()
+        Nmaxz2s.append(Nmaxz2)
 
         # print progress
         if outdetail > 0 and t % outfreq == 0:
@@ -255,7 +326,8 @@ def diffusion_expgrowth(a, Y, C, B=None, T=None, s=None,
         np.squeeze(np.array(fwers)), \
         np.squeeze(np.array(fdrs)), \
         np.squeeze(np.array(ntests)), \
-        np.squeeze(np.array(ts))
+        np.squeeze(np.array(ts)), \
+        np.array(Nmaxz2s)
 
 
     """
