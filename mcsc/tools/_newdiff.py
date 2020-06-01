@@ -56,6 +56,7 @@ def linreg(data, Y, B, T, nfeatures=50, repname='sampleXnh_sampleXpc', Nnull=500
     X, Y, NY = prepare(B, T, X, Y, Nnull)
 
     # compute mse
+    beta = np.linalg.solve(X.T.dot(X), X.T.dot(Y))
     H = X.dot(np.linalg.solve(X.T.dot(X), X.T))
     Yhat = H.dot(Y)
     mse = ((Y-Yhat)**2).mean()
@@ -67,8 +68,9 @@ def linreg(data, Y, B, T, nfeatures=50, repname='sampleXnh_sampleXpc', Nnull=500
         mse_ = ((Y_-Yhat_)**2).mean()
         nulls.append(mse_)
     nulls = np.array(nulls)
+    p = ((nulls <= mse).sum() + 1) / (len(nulls)+1)
 
-    return ((nulls <= mse).sum() + 1) / (len(nulls)+1)
+    return p, beta
 
 def pcridgereg(data, Y, B, T, L=1e6, repname='sampleXnh', Nnull=500,
     returnbeta=False):
