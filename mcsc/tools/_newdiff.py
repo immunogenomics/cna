@@ -49,11 +49,16 @@ def prepare(B, T, X, Y, Nnull):
 
     return resid.dot(X), resid.dot(Y), resid.dot(NY.T).T
 
-def linreg(data, Y, B, T, nfeatures=50, repname='sampleXnh_sampleXpc', Nnull=500):
-    if nfeatures is None:
-        nfeatures = data.uns[repname].shape[1]
-    X = data.uns[repname][:,:nfeatures]
+def linreg(data, Y, B, T, npcs=50, repname='sampleXnh', Nnull=500):
+    if npcs is None:
+        npcs = data.uns[repname].shape[1] - 1
+    X = data.uns[repname]
     X, Y, NY = prepare(B, T, X, Y, Nnull)
+
+    data.uns['temp'] = X
+    pca(data, repname='temp', npcs=npcs)
+    X = data.uns['temp_sampleXpc']
+    sqevs = data.uns['temp_sqevals']
 
     # compute mse
     beta = np.linalg.solve(X.T.dot(X), X.T.dot(Y))
@@ -70,7 +75,8 @@ def linreg(data, Y, B, T, nfeatures=50, repname='sampleXnh_sampleXpc', Nnull=500
     nulls = np.array(nulls)
     p = ((nulls <= mse).sum() + 1) / (len(nulls)+1)
 
-    return p, beta
+    del data.uns['temp']
+    return p, beta, sqevs
 
 def pcridgereg(data, Y, B, T, L=1e6, repname='sampleXnh', Nnull=500,
     returnbeta=False):
