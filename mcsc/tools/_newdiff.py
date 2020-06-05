@@ -51,16 +51,18 @@ def prepare(B, T, X, Y, Nnull):
 
     return X, Y, NY
 
-def linreg(data, Y, B, T, npcs=50, L=0, repname='sampleXnh', Nnull=500):
+def linreg(data, Y, B, T, npcs=50, L=0, repname='sampleXnh', Nnull=500, newrep=None):
     if npcs is None:
         npcs = data.uns[repname].shape[1] - 1
     X = data.uns[repname]
     X, Y, NY = prepare(B, T, X, Y, Nnull)
 
-    data.uns['temp'] = X
-    pca(data, repname='temp', npcs=npcs)
-    X = data.uns['temp_sampleXpc']
-    sqevs = data.uns['temp_sqevals']
+    if newrep is None:
+        newrep = repname+'.resid'
+    data.uns[newrep] = X
+    pca(data, repname=newrep, npcs=npcs)
+    X = data.uns[newrep+'_sampleXpc']
+    sqevs = data.uns[newrep+'_sqevals']
     X *= np.sqrt(sqevs)
 
     # compute mse
@@ -87,8 +89,7 @@ def linreg(data, Y, B, T, npcs=50, L=0, repname='sampleXnh', Nnull=500):
     p = ((nulls <= mse).sum() + 1) / (len(nulls)+1)
     betap = ((nullbeta2s <= msemarg).sum(axis=0) + 1) / (len(nullbeta2s)+1)
 
-    del data.uns['temp']
-    return p, beta, sqevs, betap
+    return p, beta, betap
 
 def pcridgereg(data, Y, B, T, L=1e6, repname='sampleXnh', Nnull=500,
     returnbeta=False):
