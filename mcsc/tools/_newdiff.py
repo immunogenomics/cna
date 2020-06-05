@@ -41,15 +41,17 @@ def prepare(B, T, X, Y, Nnull):
     else:
         T = np.hstack([T, B_oh])
 
+    # residualize confounders out of X and Y
+    resid = np.eye(len(Y)) - T.dot(np.linalg.solve(T.T.dot(T), T.T))
+    Y = resid.dot(Y)
+    X = resid.dot(X)
+
     # get null
     NY = conditional_permutation(B, Y.astype(np.float64), Nnull).T
 
-    # residualize confounders out of X and Y
-    resid = np.eye(len(Y)) - T.dot(np.linalg.solve(T.T.dot(T), T.T))
+    return X, Y, NY
 
-    return resid.dot(X), resid.dot(Y), resid.dot(NY.T).T
-
-def linreg(data, Y, B, T, npcs=50, repname='sampleXnh', Nnull=500):
+def linreg(data, Y, B, T, npcs=50, L=0, repname='sampleXnh', Nnull=500):
     if npcs is None:
         npcs = data.uns[repname].shape[1] - 1
     X = data.uns[repname]
@@ -59,24 +61,34 @@ def linreg(data, Y, B, T, npcs=50, repname='sampleXnh', Nnull=500):
     pca(data, repname='temp', npcs=npcs)
     X = data.uns['temp_sampleXpc']
     sqevs = data.uns['temp_sqevals']
+    X *= np.sqrt(sqevs)
 
     # compute mse
-    beta = np.linalg.solve(X.T.dot(X), X.T.dot(Y))
-    H = X.dot(np.linalg.solve(X.T.dot(X), X.T))
+    G = np.linalg.solve(X.T.dot(X) + L*np.eye(len(X.T)), X.T)
+    H = X.dot(G)
+    beta = G.dot(Y)
     Yhat = H.dot(Y)
-    mse = ((Y-Yhat)**2).mean()
+    mse = ((Y-Yhat)**2).mean() / Y.var()
+    msemarg = ((Y[:,None] - X*beta)**2).mean(axis=0) / Y.var()
 
     # null testing
     nulls = []
+    nullbeta2s = []
     for Y_ in NY:
+        beta_ = G.dot(Y_)
         Yhat_ = H.dot(Y_)
-        mse_ = ((Y_-Yhat_)**2).mean()
+        mse_ = ((Y_-Yhat_)**2).mean() / Y_.var()
         nulls.append(mse_)
+
+        msemarg_ = ((Y_[:,None] - X*beta_)**2).mean(axis=0) / Y_.var()
+        nullbeta2s.append(msemarg_)
     nulls = np.array(nulls)
+    nullbeta2s = np.array(nullbeta2s)
     p = ((nulls <= mse).sum() + 1) / (len(nulls)+1)
+    betap = ((nullbeta2s <= msemarg).sum(axis=0) + 1) / (len(nullbeta2s)+1)
 
     del data.uns['temp']
-    return p, beta, sqevs
+    return p, beta, sqevs, betap
 
 def pcridgereg(data, Y, B, T, L=1e6, repname='sampleXnh', Nnull=500,
     returnbeta=False):
