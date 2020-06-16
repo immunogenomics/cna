@@ -1,3 +1,2 @@
-from ._diffusion import diffusion
 from ._dpca import dpca
-from ._newdiff import nns
+from ._pfm import nfm, cfm, linreg, pca

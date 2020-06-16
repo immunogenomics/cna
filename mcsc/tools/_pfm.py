@@ -4,19 +4,38 @@ from ._stats import conditional_permutation, empirical_fdrs, \
     empirical_fwers, minfwer_loo, numtests, numtests_loo
 import time, gc
 
-def nns(data, ms=3, sampleXmeta='sampleXmeta', key_added='sampleXnh'):
+# creates a neighborhood frequency matrix
+#   requires data.uns[sampleXmeta][ncellsid] to contain the number of cells in each sample.
+#   this can be obtained using mcsc.pp.sample_size
+def nfm(data, nsteps=3, sampleXmeta='sampleXmeta', ncellsid='C', key_added='sampleXnh'):
     a = data.uns['neighbors']['connectivities']
-    C = data.uns[sampleXmeta].C.values
+    C = data.uns[sampleXmeta][ncellsid].values
     colsums = np.array(a.sum(axis=0)).flatten() + 1
     s = np.repeat(np.eye(len(C)), C, axis=0)
 
-    for i in range(ms):
-        if i % 1 == 0:
-            print(i)
+    for i in range(nsteps):
+        print(i)
         s = a.dot(s/colsums[:,None]) + s/colsums[:,None]
     snorm = s / C
 
     data.uns[key_added] = snorm.T
+
+# creates a cluster frequency matrix
+#   data.obs[clusters] must contain the cluster assignment for each cell
+def cfm(data, clusters, sampleXmeta='sampleXmeta', sampleid='id', key_added=None):
+    if key_added is None:
+        key_added = 'sampleX'+clusters
+
+    sm = data.uns[sampleXmeta]
+    nclusters = len(data.obs[clusters].unique())
+    cols = []
+    for i in range(nclusters):
+        cols.append(clusters+'_'+str(i))
+        sm[cols[-1]] = data.obs.groupby(sampleid)[clusters].aggregate(
+            lambda x: (x.astype(np.int)==i).mean())
+
+    data.uns[key_added] = sm[cols].values
+    sm.drop(columns=cols, inplace=True)
 
 def pca(data, repname='sampleXnh', npcs=None):
     if npcs is None:
@@ -90,66 +109,3 @@ def linreg(data, Y, B, T, npcs=50, L=0, repname='sampleXnh', Nnull=500, newrep=N
     betap = ((nullbeta2s <= msemarg).sum(axis=0) + 1) / (len(nullbeta2s)+1)
 
     return p, beta, betap
-
-def pcridgereg(data, Y, B, T, L=1e6, repname='sampleXnh', Nnull=500,
-    returnbeta=False):
-    X = data.uns[repname+'_sampleXpc']
-    N, M = X.shape
-    sqevs = data.uns[repname+'_sqevals']
-    X = X * np.sqrt(sqevs) * np.sqrt(N)
-    X, Y, NY = prepare(B, T, X, Y, Nnull)
-
-    # compute mse
-    H = X.dot(np.linalg.solve(X.T.dot(X) + N*L*np.eye(M), X.T))
-    Yhat = H.dot(Y)
-    mse = ((Y-Yhat)**2).mean()
-
-    if returnbeta:
-        return np.linalg.solve(X.T.dot(X) + N*L*np.eye(M), X.T.dot(Y)), Yhat, mse
-
-    # null testing
-    Yhat_ = H.dot(NY.T)
-    nulls = ((Yhat_ - NY.T)**2).mean(axis=0)
-    p = ((nulls <= mse).sum() + 1) / (len(nulls)+1)
-    return p
-
-def kernelridgereg(data, Y, B, T, L=1, repname='sampleXnh', Nnull=500):
-    X = data.uns[repname]
-    N = len(X)
-    X = X * np.sqrt(N)
-    X, Y, NY = prepare(B, T, X, Y, Nnull)
-
-    # compute MSE
-    K = X.dot(X.T)
-    H = K.dot(np.linalg.inv(K + L*N*np.eye(N)))
-    Yhat = H.dot(Y)
-    mse = ((Y-Yhat)**2).mean()
-
-    # null testing
-    nulls = []
-    for Y_ in NY:
-        Yhat_ = H.dot(Y_)
-        mse_ = ((Y_-Yhat_)**2).mean()
-        nulls.append(mse_)
-    nulls = np.array(nulls)
-
-    return ((nulls <= mse).sum() + 1) / (len(nulls)+1)
-
-def marg_minp(data, Y, B, T, nfeatures=20, repname='sampleXnh_sampleXpc', Nnull=500):
-    if nfeatures is None:
-        nfeatures = data.uns[repname].shape[1]
-    X = data.uns[repname][:,:nfeatures]
-    X, Y, NY = prepare(B, T, X, Y, Nnull)
-
-    # compute stats
-    beta2 = (X.T.dot(Y) / (X**2).sum(axis=0))**2
-
-    # null testing
-    nulls = []
-    for Y_ in NY:
-        beta2_ = (X.T.dot(Y_) / (X**2).sum(axis=0))**2
-        nulls.append(beta2_)
-    nulls = np.array(nulls)
-
-    ps = ((nulls >= beta2).sum(axis=0) + 1) / (len(nulls)+1)
-    return ps.min() * len(ps)
