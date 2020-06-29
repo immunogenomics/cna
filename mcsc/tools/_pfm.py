@@ -46,6 +46,7 @@ def pca(data, repname='sampleXnh', npcs=None):
     ssT = s.dot(s.T)
     V, d, VT = np.linalg.svd(ssT)
     U = s.T.dot(V) / np.sqrt(d)
+    del s; gc.collect()
 
     data.uns[repname+'_sqevals'] = d[:npcs]
     data.uns[repname+'_featureXpc'] = U[:,:npcs]
