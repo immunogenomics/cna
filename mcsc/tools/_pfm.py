@@ -1,7 +1,11 @@
 import numpy as np
+import pandas as pd
 import scipy.stats as st
 from ._stats import conditional_permutation, empirical_fdrs, \
     empirical_fwers, minfwer_loo, numtests, numtests_loo
+import statsmodels.api as sm
+import statsmodels.formula.api as smf
+import scipy.stats as st
 import time, gc
 
 # creates a neighborhood frequency matrix
@@ -110,3 +114,38 @@ def linreg(data, Y, B, T, npcs=50, L=0, repname='sampleXnh', Nnull=500, newrep=N
     betap = ((nullbeta2s <= msemarg).sum(axis=0) + 1) / (len(nullbeta2s)+1)
 
     return p, beta, betap
+
+def mixedmodel(data, Y, B, T, npcs=50, repname='sampleXnh', usepca=True):
+    if npcs is None:
+        npcs = data.uns[repname].shape[1] - 1
+    if usepca and repname+'_sampleXpc' not in data.uns.keys():
+        pca(data, repname=repname, npcs=npcs)
+
+    if usepca:
+        X = data.uns[repname+'_sampleXpc'][:,:npcs]
+        sqevs = data.uns[repname+'_sqevals'][:npcs]
+        X *= np.sqrt(sqevs)
+    else:
+        X = data.uns[repname]
+
+    pcnames = ['PC'+str(i) for i in range(len(X.T))]
+    covnames = ['T'+str(i) for i in range(len(T.T))]
+
+    df = pd.DataFrame(
+        np.hstack([X, T, B.reshape((-1,1)), Y.reshape((-1,1))]),
+        columns=pcnames+covnames+['batch', 'Y'])
+    md1 = smf.mixedlm(
+        'Y ~ ' + '+'.join(covnames+pcnames),
+        df, groups='batch')
+    mdf1 = md1.fit(reml=False)
+    print(mdf1.summary())
+    md0 = smf.mixedlm(
+        'Y ~ ' + '+'.join(covnames),
+        df, groups='batch')
+    mdf0 = md0.fit(reml=False)
+    print(mdf0.summary())
+
+    llr = mdf1.llf - mdf0.llf
+    p = st.chi2.sf(2*llr, len(pcnames))
+
+    return p, None, None
