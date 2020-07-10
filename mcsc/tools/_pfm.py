@@ -129,18 +129,24 @@ def mixedmodel(data, Y, B, T, npcs=50, repname='sampleXnh', usepca=True):
         X = data.uns[repname]
 
     pcnames = ['PC'+str(i) for i in range(len(X.T))]
-    covnames = ['T'+str(i) for i in range(len(T.T))]
+    if T is not None:
+        covnames = ['T'+str(i) for i in range(len(T.T))]
+        df = pd.DataFrame(
+            np.hstack([X, T, B.reshape((-1,1)), Y.reshape((-1,1))]),
+            columns=pcnames+covnames+['batch', 'Y'])
+    else:
+        covnames = []
+        df = pd.DataFrame(
+            np.hstack([X, B.reshape((-1,1)), Y.reshape((-1,1))]),
+            columns=pcnames+['batch', 'Y'])
 
-    df = pd.DataFrame(
-        np.hstack([X, T, B.reshape((-1,1)), Y.reshape((-1,1))]),
-        columns=pcnames+covnames+['batch', 'Y'])
     md1 = smf.mixedlm(
         'Y ~ ' + '+'.join(covnames+pcnames),
         df, groups='batch')
     mdf1 = md1.fit(reml=False)
     print(mdf1.summary())
     md0 = smf.mixedlm(
-        'Y ~ ' + '+'.join(covnames),
+        'Y ~ ' + ('1' if covnames == [] else '+'.join(covnames)),
         df, groups='batch')
     mdf0 = md0.fit(reml=False)
     print(mdf0.summary())
