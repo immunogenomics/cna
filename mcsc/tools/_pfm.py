@@ -122,9 +122,8 @@ def mixedmodel(data, Y, B, T, npcs=50, repname='sampleXnh', usepca=True):
         pca(data, repname=repname, npcs=npcs)
 
     if usepca:
+        #sqevs = data.uns[repname+'_sqevals'][:npcs]
         X = data.uns[repname+'_sampleXpc'][:,:npcs]
-        sqevs = data.uns[repname+'_sqevals'][:npcs]
-        X *= np.sqrt(sqevs)
     else:
         X = data.uns[repname]
 
