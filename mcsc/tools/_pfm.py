@@ -115,42 +115,89 @@ def linreg(data, Y, B, T, npcs=50, L=0, repname='sampleXnh', Nnull=500, newrep=N
 
     return p, beta, betap
 
-def mixedmodel(data, Y, B, T, npcs=50, repname='sampleXnh', usepca=True):
+def mixedmodel(data, Y, B, T, npcs=50, repname='sampleXnh', usepca=True,
+        pval='lrt', badbatch_r2=0.05):
     if npcs is None:
         npcs = data.uns[repname].shape[1] - 1
     if usepca and repname+'_sampleXpc' not in data.uns.keys():
         pca(data, repname=repname, npcs=npcs)
 
+    # define X
     if usepca:
         #sqevs = data.uns[repname+'_sqevals'][:npcs]
         X = data.uns[repname+'_sampleXpc'][:,:npcs]
     else:
         X = data.uns[repname]
+    testnames = ['PC'+str(i) for i in range(len(X.T))]
 
-    pcnames = ['PC'+str(i) for i in range(len(X.T))]
-    if T is not None:
-        covnames = ['T'+str(i) for i in range(len(T.T))]
-        df = pd.DataFrame(
-            np.hstack([X, T, B.reshape((-1,1)), Y.reshape((-1,1))]),
-            columns=pcnames+covnames+['batch', 'Y'])
+    # define fixed effect covariates
+    if T is None:
+        T = np.zeros((len(X), 0))
+    covnames = ['T'+str(i) for i in range(len(T.T))]
+
+    # add any problematic batches as fixed effects
+    corrs = np.array([
+        np.corrcoef((B==b).astype(np.float), X.T)[0,1:]
+        for b in np.unique(B)
+    ])
+    badbatches = np.unique(B)[(corrs**2).max(axis=1) > badbatch_r2]
+    batchnames = ['B'+str(b) for b in badbatches]
+    if len(badbatches) > 0:
+        batch_fe = np.array([
+            (B == b).astype(np.float)
+            for b in badbatches]).T
+        B = B.copy()
+        B[np.isin(B, badbatches)] = -1
     else:
-        covnames = []
-        df = pd.DataFrame(
-            np.hstack([X, B.reshape((-1,1)), Y.reshape((-1,1))]),
-            columns=pcnames+['batch', 'Y'])
+        batch_fe = np.zeros((len(X), 0))
 
-    md1 = smf.mixedlm(
-        'Y ~ ' + '+'.join(covnames+pcnames),
-        df, groups='batch')
-    mdf1 = md1.fit(reml=False)
-    print(mdf1.summary())
+    # construct the dataframe for the analysis
+    df = pd.DataFrame(
+        np.hstack([X, T, batch_fe, B.reshape((-1,1)), Y.reshape((-1,1))]),
+        columns=testnames+covnames+batchnames+['batch', 'Y'])
+
+    # build the alternative model
+    fixedeffects = covnames + batchnames
     md0 = smf.mixedlm(
-        'Y ~ ' + ('1' if covnames == [] else '+'.join(covnames)),
+        'Y ~ ' + ('1' if fixedeffects == [] else '+'.join(fixedeffects)),
         df, groups='batch')
     mdf0 = md0.fit(reml=False)
     print(mdf0.summary())
 
-    llr = mdf1.llf - mdf0.llf
-    p = st.chi2.sf(2*llr, len(pcnames))
+    if pval == 'lrt':
+        md1 = smf.mixedlm(
+            'Y ~ ' + '+'.join(fixedeffects+testnames),
+            df, groups='batch')
+        mdf1 = md1.fit(reml=False)
+        print(mdf1.summary())
+        llr = mdf1.llf - mdf0.llf
+        p = st.chi2.sf(2*llr, len(testnames))
+        beta = mdf1.params[testnames] # coefficients in linear regression
+        betap = mdf1.pvalues[testnames] # p-values for individual coefficients
+        return p, beta, betap
+    elif pval == 'marg_lrt': # this option can probably be deleted later
+        pvals = []
+        for pc in testnames:
+            md1 = smf.mixedlm(
+                'Y ~ ' + '+'.join(fixedeffects+[pc]),
+                df, groups='batch')
+            mdf1 = md1.fit(reml=False)
+            llr = mdf1.llf - mdf0.llf
+            pvals.append(st.chi2.sf(2*llr, 1))
+            print('\tfit model for', pc, 'pval =', pvals[-1])
+        pvals = np.array(pvals)
+        print(pvals)
+        return np.min(pvals)*len(pvals), None, pvals
+    else:
+        print('ERROR: pval must be either lrt or marg_lrt')
+        return None, None, None
 
-    return p, None, None
+# other methods of computing p-values, for future reference
+#    elif pval == 'ftest':
+#        test = np.eye(len(mdf1.params))[1+len(covnames):1+len(covnames)+len(testnames)]
+#        p = mdf1.f_test(test).pvalue
+#    elif pval == 'minp':
+#        p = mdf1.pvalues[testnames].min() * len(testnames)
+#    elif pval == 'wald':
+#        test = np.eye(len(mdf1.params))[1+len(covnames):1+len(covnames)+len(testnames)]
+#        p = mdf1.wald_test(test).pvalue
