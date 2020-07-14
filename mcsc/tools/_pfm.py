@@ -175,29 +175,6 @@ def mixedmodel(data, Y, B, T, npcs=50, repname='sampleXnh', usepca=True,
         beta = mdf1.params[testnames] # coefficients in linear regression
         betap = mdf1.pvalues[testnames] # p-values for individual coefficients
         return p, beta, betap
-    elif pval == 'marg_lrt': # this option can probably be deleted later
-        pvals = []
-        for pc in testnames:
-            md1 = smf.mixedlm(
-                'Y ~ ' + '+'.join(fixedeffects+[pc]),
-                df, groups='batch')
-            mdf1 = md1.fit(reml=False)
-            llr = mdf1.llf - mdf0.llf
-            pvals.append(st.chi2.sf(2*llr, 1))
-            print('\tfit model for', pc, 'pval =', pvals[-1])
-        pvals = np.array(pvals)
-        print(pvals)
-        return np.min(pvals)*len(pvals), None, pvals
     else:
-        print('ERROR: pval must be either lrt or marg_lrt')
+        print('ERROR: the only pval method currently supported is lrt')
         return None, None, None
-
-# other methods of computing p-values, for future reference
-#    elif pval == 'ftest':
-#        test = np.eye(len(mdf1.params))[1+len(covnames):1+len(covnames)+len(testnames)]
-#        p = mdf1.f_test(test).pvalue
-#    elif pval == 'minp':
-#        p = mdf1.pvalues[testnames].min() * len(testnames)
-#    elif pval == 'wald':
-#        test = np.eye(len(mdf1.params))[1+len(covnames):1+len(covnames)+len(testnames)]
-#        p = mdf1.wald_test(test).pvalue
