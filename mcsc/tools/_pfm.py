@@ -7,6 +7,7 @@ import statsmodels.api as sm
 import statsmodels.formula.api as smf
 import scipy.stats as st
 import time, gc
+from argparse import Namespace
 
 # creates a neighborhood frequency matrix
 #   requires data.uns[sampleXmeta][ncellsid] to contain the number of cells in each sample.
@@ -57,19 +58,21 @@ def pca(data, repname='sampleXnh', npcs=None):
     data.uns[repname+'_sampleXpc'] = V[:,:npcs]
 
 def mixedmodel(data, Y, B, T, npcs=50, repname='sampleXnh', usepca=True,
-        pval='lrt', badbatch_r2=0.05):
+        pval='lrt', badbatch_r2=0.05, outputlevel=1):
     if npcs is None:
         npcs = data.uns[repname].shape[1] - 1
-    if usepca and repname+'_sampleXpc' not in data.uns.keys():
+    if usepca and repname+'_sampleXpc' not in data.uns.keys() \
+        or usepca and len(data.uns[repname+'_sqevals']) < npcs:
         pca(data, repname=repname, npcs=npcs)
 
     # define X
     if usepca:
         #sqevs = data.uns[repname+'_sqevals'][:npcs]
         X = data.uns[repname+'_sampleXpc'][:,:npcs]
+        testnames = ['PC'+str(i) for i in range(len(X.T))]
     else:
         X = data.uns[repname]
-    testnames = ['PC'+str(i) for i in range(len(X.T))]
+        testnames = ['X'+str(i) for i in range(len(X.T))]
 
     # define fixed effect covariates
     if T is None:
@@ -103,19 +106,24 @@ def mixedmodel(data, Y, B, T, npcs=50, repname='sampleXnh', usepca=True,
         'Y ~ ' + ('1' if fixedeffects == [] else '+'.join(fixedeffects)),
         df, groups='batch')
     mdf0 = md0.fit(reml=False)
-    print(mdf0.summary())
+    if outputlevel > 0: print(mdf0.summary())
 
+    res = {}
     if pval == 'lrt':
         md1 = smf.mixedlm(
             'Y ~ ' + '+'.join(fixedeffects+testnames),
             df, groups='batch')
         mdf1 = md1.fit(reml=False)
-        print(mdf1.summary())
+        if outputlevel > 0: print(mdf1.summary())
         llr = mdf1.llf - mdf0.llf
-        p = st.chi2.sf(2*llr, len(testnames))
-        beta = mdf1.params[testnames] # coefficients in linear regression
-        betap = mdf1.pvalues[testnames] # p-values for individual coefficients
-        return p, beta, betap
+        res['p'] = st.chi2.sf(2*llr, len(testnames))
+        res['gamma'] = mdf1.params[testnames] # coefficients in linear regression
+        res['gamma_p'] = mdf1.pvalues[testnames] # p-values for individual coefficients
+        res['gamma_scale'] = np.sqrt(data.uns[repname + '_sqevals'][:npcs])
+        if usepca:
+            V = data.uns[repname + '_featureXpc'][:,:npcs]
+            res['beta'] = V.dot(res['gamma'] / res['gamma_scale'])
+        return Namespace(**res)
     else:
         print('ERROR: the only pval method currently supported is lrt')
         return None, None, None
