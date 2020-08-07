@@ -38,6 +38,7 @@ def cfm(data, clusters, sampleXmeta='sampleXmeta', sampleid='id', key_added=None
         cols.append(clusters+'_'+str(i))
         sm[cols[-1]] = data.obs.groupby(sampleid)[clusters].aggregate(
             lambda x: (x.astype(np.int)==i).mean())
+    #TODO this should use pd.get_dummies and then aggregate that instead
 
     data.uns[key_added] = sm[cols].values
     sm.drop(columns=cols, inplace=True)
