@@ -121,6 +121,7 @@ def mixedmodel(data, Y, B, T, npcs=50, repname='sampleXnh', usepca=True,
         res['gamma'] = mdf1.params[testnames] # coefficients in linear regression
         res['gamma_p'] = mdf1.pvalues[testnames] # p-values for individual coefficients
         res['gamma_scale'] = np.sqrt(data.uns[repname + '_sqevals'][:npcs])
+        res['covar_p'] = mdf1.pvalues[covnames]# p-values for individual covariates
         if usepca:
             V = data.uns[repname + '_featureXpc'][:,:npcs]
             res['beta'] = V.dot(res['gamma'] / res['gamma_scale'])
