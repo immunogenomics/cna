@@ -1,15 +1,174 @@
 import numpy as np
 import pandas as pd
 import scipy.stats as st
-from ._stats import conditional_permutation, empirical_fdrs, \
-    empirical_fwers, minfwer_loo, numtests, numtests_loo
+from ._stats import conditional_permutation, empirical_fdrs, numtests
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
 import scipy.stats as st
 import time, gc
 from argparse import Namespace
 
-# creates a neighborhood frequency matrix
+###### CNAv2/v3
+# creates a neighborhood abundance matrix
+#   requires data.uns[sampleXmeta][ncellsid] to contain the number of cells in each sample.
+#   this can be obtained using mcsc.pp.sample_size
+def nam(data, nsteps=3, sampleXmeta='sampleXmeta', ncellsid='C', key_added='sampleXnh'):
+    a = data.uns['neighbors']['connectivities']
+    C = data.uns[sampleXmeta][ncellsid].values
+    colsums = np.array(a.sum(axis=0)).flatten() + 1
+    s = np.repeat(np.eye(len(C)), C, axis=0)
+
+    prevmedkurt = np.inf
+    for i in range(15):
+        print('taking step', i+1)
+        s = a.dot(s/colsums[:,None]) + s/colsums[:,None]
+
+        if nsteps is None:
+            medkurt = np.median(st.kurtosis(s/C, axis=1))
+            print('median excess kurtosis:', medkurt)
+            if prevmedkurt - medkurt < 3:
+                break
+            prevmedkurt = medkurt
+        elif i+1 == nsteps:
+            break
+
+    snorm = s / C
+    data.uns[key_added] = snorm.T
+
+def qc(NAM, batches):
+    N = len(NAM)
+    if len(np.unique(batches)) == 1:
+        print('warning: only one unique batch supplied to qc')
+        return
+
+    B = pd.get_dummies(batches).values
+    B = (B - B.mean(axis=0))/B.std(axis=0)
+
+    batchcorr = B.T.dot(NAM - NAM.mean(axis=0)) / N / NAM.std(axis=0)
+    batchcorr = np.nan_to_num(batchcorr) # if batch is constant then 0 correlation
+    maxbatchcorr2 = np.max(batchcorr**2, axis=0)
+    print('throwing out neighborhoods with maxbatchcorr2 >=', 2*np.median(maxbatchcorr2))
+    keep = (maxbatchcorr2 < 2*np.median(maxbatchcorr2))
+    print('keeping', keep.sum(), 'neighborhoods')
+
+    return NAM[:, keep], keep
+
+def prep(NAM, covs, batches, ridge=None):
+    N = len(NAM)
+    if covs is None:
+        covs = np.zeros((N, 0))
+    else:
+        covs = (covs - covs.mean(axis=0))/covs.std(axis=0)
+
+    if len(np.unique(batches)) == 1:
+        print('warning: only one unique batch supplied to prep')
+        C = covs
+        if len(C.T) == 0:
+            M = np.eye(N)
+        else:
+            M = np.eye(N) - C.dot(np.linalg.solve(C.T.dot(C), C.T))
+    else:
+        B = pd.get_dummies(batches).values
+        B = (B - B.mean(axis=0))/B.std(axis=0)
+        C = np.hstack([B, covs])
+
+        if ridge is not None:
+            ridges = [ridge]
+        else:
+            ridges = [1e5, 1e4, 1e3, 1e2, 1e1, 1e0, 1e-1, 1e-2, 1e-3, 1e-4, 0]
+
+        for ridge in ridges:
+            L = np.diag([1]*len(B.T)+[0]*(len(C.T)-len(B.T)))
+            M = np.eye(N) - C.dot(np.linalg.solve(C.T.dot(C) + ridge*len(C)*L, C.T))
+            NAM_ = M.dot(NAM)
+
+            batchcorr = B.T.dot(NAM_ - NAM_.mean(axis=0)) / len(B) / NAM_.std(axis=0)
+            maxbatchcorr = np.max(batchcorr**2, axis=0)
+
+            print(ridge, np.percentile(maxbatchcorr, 50))
+
+            if np.percentile(maxbatchcorr, 50) <= 0.025:
+                break
+
+    NAM = NAM_
+    NAM = NAM / NAM.std(axis=0)
+
+    U, sv, UT = np.linalg.svd(NAM.dot(NAM.T))
+    V = NAM.T.dot(U) / np.sqrt(sv)
+
+    return (U, sv, V), M, len(C.T)
+
+def association(NAMsvd, M, r, y, batches, Nnull=1000, local_test=False, seed=None):
+    if seed is not None:
+        np.random.seed(seed)
+    ks = np.arange(5,21,5)
+
+    # prep data
+    n = len(y)
+    (U, sv, V) = NAMsvd
+    y = (y - y.mean())/y.std()
+
+    def reg(q, k):
+        Xpc = U[:,:k]
+        gamma = Xpc.T.dot(q)
+        qhat = Xpc.dot(gamma)
+        return qhat, gamma
+
+    def ftest(yhat, ycond, k):
+        ssefull = (yhat - ycond).dot(yhat - ycond)
+        ssered = ycond.dot(ycond)
+        deltasse =  ssered - ssefull
+        f = (deltasse / k) / (ssefull/n)
+        return st.f.sf(f, k, n-(1+r+k))
+
+    def minp_f(z):
+        zcond = M.dot(z)
+        zcond = zcond / zcond.std()
+        ps = np.array([ftest(reg(zcond, k)[0], zcond, k) for k in ks])
+        return ks[np.argmin(ps)], ps[np.argmin(ps)], ps
+
+    # get non-null f-test p-value
+    k, p, ps, = minp_f(y)
+
+    # compute final p-value using Nnull null f-test p-values
+    y_ = conditional_permutation(batches, y, Nnull)
+    nullminps = np.array([minp_f(y__)[1] for y__ in y_.T])
+    pfinal = ((nullminps <= p+1e-8).sum() + 1)/(Nnull + 1)
+
+    # get neighborhood scores
+    ycond = M.dot(y)
+    ycond /= ycond.std()
+    yhat, gamma = reg(ycond, k)
+    ncorrs = (np.sqrt(sv[:k])*gamma/n).dot(V[:,:k].T)
+
+    # get neighborhood fdr's if requested
+    if local_test:
+        print('computing neighborhood-level FDRs')
+        Nnull = min(1000, Nnull)
+        y_ = y_[:,:Nnull]
+        ycond_ = M.dot(y_)
+        ycond_ /= ycond_.std(axis=0)
+        gamma_ = U[:,:k].T.dot(ycond_) / len(ycond_)
+        nullncorrs = np.abs(V[:,:k].dot(np.sqrt(sv[:k])[:,None]*gamma_))
+
+        fdrs = pd.DataFrame()
+        for t in np.arange(np.abs(ncorrs).max()/4, np.abs(ncorrs).max(), 0.005):
+            print('.', end='')
+            numdetected = (np.abs(ncorrs) > t).sum()
+            fdrs = fdrs.append(
+                {'threshold':t, 'numhits':numdetected,
+					'fdr':(nullncorrs > t).sum(axis=0).mean() / numdetected},
+                ignore_index=True)
+        print('')
+    else:
+        fdrs = None
+
+    res = {'p':pfinal, 'nullminps':nullminps, 'k':k, 'ncorrs':ncorrs, 'fdrs':fdrs,
+			'yresid_hat':yhat, 'yresid':ycond}
+    return Namespace(**res)
+
+###### CNAv1
+# creates a neighborhood abundance matrix
 #   requires data.uns[sampleXmeta][ncellsid] to contain the number of cells in each sample.
 #   this can be obtained using mcsc.pp.sample_size
 def nfm(data, nsteps=3, sampleXmeta='sampleXmeta', ncellsid='C', key_added='sampleXnh'):
