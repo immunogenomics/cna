@@ -12,7 +12,7 @@ from argparse import Namespace
 # creates a neighborhood abundance matrix
 #   requires data.uns[sampleXmeta][ncellsid] to contain the number of cells in each sample.
 #   this can be obtained using mcsc.pp.sample_size
-def nam(data, nsteps=3, sampleXmeta='sampleXmeta', ncellsid='C', key_added='sampleXnh'):
+def nam(data, nsteps=None, sampleXmeta='sampleXmeta', ncellsid='C', key_added='NAM'):
     a = data.uns['neighbors']['connectivities']
     C = data.uns[sampleXmeta][ncellsid].values
     colsums = np.array(a.sum(axis=0)).flatten() + 1
@@ -27,6 +27,7 @@ def nam(data, nsteps=3, sampleXmeta='sampleXmeta', ncellsid='C', key_added='samp
             medkurt = np.median(st.kurtosis(s/C, axis=1))
             print('median excess kurtosis:', medkurt)
             if prevmedkurt - medkurt < 3:
+                print('stopping after', i+1, 'steps')
                 break
             prevmedkurt = medkurt
         elif i+1 == nsteps:
@@ -35,7 +36,7 @@ def nam(data, nsteps=3, sampleXmeta='sampleXmeta', ncellsid='C', key_added='samp
     snorm = s / C
     data.uns[key_added] = snorm.T
 
-def qc(NAM, batches):
+def _qc(NAM, batches):
     N = len(NAM)
     if len(np.unique(batches)) == 1:
         print('warning: only one unique batch supplied to qc')
@@ -53,7 +54,7 @@ def qc(NAM, batches):
 
     return NAM[:, keep], keep
 
-def prep(NAM, covs, batches, ridge=None):
+def _prep(NAM, covs, batches, ridge=None):
     N = len(NAM)
     if covs is None:
         covs = np.zeros((N, 0))
@@ -85,7 +86,8 @@ def prep(NAM, covs, batches, ridge=None):
             batchcorr = B.T.dot(NAM_ - NAM_.mean(axis=0)) / len(B) / NAM_.std(axis=0)
             maxbatchcorr = np.max(batchcorr**2, axis=0)
 
-            print(ridge, np.percentile(maxbatchcorr, 50))
+            print('with ridge', ridge, 'median max batch correlation =',
+                    np.percentile(maxbatchcorr, 50))
 
             if np.percentile(maxbatchcorr, 50) <= 0.025:
                 break
@@ -98,7 +100,7 @@ def prep(NAM, covs, batches, ridge=None):
 
     return (U, sv, V), M, len(C.T)
 
-def association(NAMsvd, M, r, y, batches, Nnull=1000, local_test=False, seed=None):
+def _association(NAMsvd, M, r, y, batches, Nnull=1000, local_test=False, seed=None):
     if seed is not None:
         np.random.seed(seed)
     ks = np.arange(5,21,5)
@@ -166,6 +168,37 @@ def association(NAMsvd, M, r, y, batches, Nnull=1000, local_test=False, seed=Non
     res = {'p':pfinal, 'nullminps':nullminps, 'k':k, 'ncorrs':ncorrs, 'fdrs':fdrs,
 			'yresid_hat':yhat, 'yresid':ycond}
     return Namespace(**res)
+
+def association(data, y, batches, covs, suffix='', **kwargs):
+    du = data.uns
+    if 'NAM'+suffix not in du:
+        print('NAM not found; computing and saving')
+        nam(data, key_added='NAM'+suffix)
+    if 'NAMqc'+suffix not in du or not np.allclose(batches, du['batches'+suffix]):
+        print('qcd NAM not found; computing and saving')
+        NAMqc, keep = _qc(du['NAM'+suffix], batches)
+        du['NAMqc'+suffix] = NAMqc
+        du['keptcells'+suffix] = keep
+        du['batches'+suffix] = batches
+    def samecovs(A, B):
+        if A is None: A = np.zeros(0)
+        if A.shape == B.shape:
+            return np.allclose(A, B)
+        else:
+            return False
+    if 'NAMsvdU'+suffix not in du or not samecovs(covs, du['covs'+suffix]):
+        print('covariate-adjusted NAM not found; computing and saving')
+        NAMsvd, M, r = _prep(du['NAMqc'+suffix], covs, batches)
+        du['NAMsvdU'+suffix] = NAMsvd[0]
+        du['NAMsvdsvs'+suffix] = NAMsvd[1]
+        du['NAMsvdV'+suffix] = NAMsvd[2]
+        du['M'+suffix] = M
+        du['r'+suffix] = r
+        du['covs'+suffix] = (np.zeros(0) if covs is None else covs)
+
+    NAMsvd = (du['NAMsvdU'+suffix], du['NAMsvdsvs'+suffix], du['NAMsvdV'+suffix])
+    return _association(NAMsvd, du['M'+suffix], du['r'+suffix],
+                        y, batches, **kwargs)
 
 ###### CNAv1
 # creates a neighborhood abundance matrix
