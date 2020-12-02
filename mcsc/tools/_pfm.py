@@ -1,18 +1,21 @@
 import numpy as np
 import pandas as pd
 import scipy.stats as st
-from ._stats import conditional_permutation, empirical_fdrs, numtests
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
 import scipy.stats as st
 import time, gc
 from argparse import Namespace
 
+import mcsc.tools._stats as stats
+from importlib import reload
+reload(stats)
+
 ###### CNAv2/v3
 # creates a neighborhood abundance matrix
 #   requires data.uns[sampleXmeta][ncellsid] to contain the number of cells in each sample.
 #   this can be obtained using mcsc.pp.sample_size
-def nam(data, nsteps=None, sampleXmeta='sampleXmeta', ncellsid='C', key_added='NAM'):
+def nam(data, nsteps=None, sampleXmeta='sampleXmeta', ncellsid='C'):
     a = data.uns['neighbors']['connectivities']
     C = data.uns[sampleXmeta][ncellsid].values
     colsums = np.array(a.sum(axis=0)).flatten() + 1
@@ -34,7 +37,7 @@ def nam(data, nsteps=None, sampleXmeta='sampleXmeta', ncellsid='C', key_added='N
             break
 
     snorm = s / C
-    data.uns[key_added] = snorm.T
+    return snorm.T
 
 def _qc(NAM, batches):
     N = len(NAM)
@@ -143,7 +146,8 @@ def _association(NAMsvd, M, r, y, batches, Nnull=1000, local_test=False, seed=No
     yhat, gamma = reg(ycond, k)
     ncorrs = (np.sqrt(sv[:k])*gamma/n).dot(V[:,:k].T)
 
-    # get neighborhood fdr's if requested
+    # get neighborhood fdrs if requested
+    fdrs, fdr_5p_t, fdr_10p_t = None, None, None
     if local_test:
         print('computing neighborhood-level FDRs')
         Nnull = min(1000, Nnull)
@@ -153,30 +157,35 @@ def _association(NAMsvd, M, r, y, batches, Nnull=1000, local_test=False, seed=No
         gamma_ = U[:,:k].T.dot(ycond_) / len(ycond_)
         nullncorrs = np.abs(V[:,:k].dot(np.sqrt(sv[:k])[:,None]*gamma_))
 
-        fdrs = pd.DataFrame()
-        for t in np.arange(np.abs(ncorrs).max()/4, np.abs(ncorrs).max(), 0.005):
-            print('.', end='')
-            numdetected = (np.abs(ncorrs) > t).sum()
-            fdrs = fdrs.append(
-                {'threshold':t, 'numhits':numdetected,
-					'fdr':(nullncorrs > t).sum(axis=0).mean() / numdetected},
-                ignore_index=True)
-        print('')
-    else:
-        fdrs = None
+        fdr_thresholds = np.arange(np.abs(ncorrs).max()/4, np.abs(ncorrs).max(), 0.005)
+        fdr_vals = stats.empirical_fdrs(ncorrs, nullncorrs, fdr_thresholds)
+
+        fdrs = pd.DataFrame({
+            'threshold':fdr_thresholds,
+            'fdr':fdr_vals,
+            'num_detected': [(np.abs(ncorrs)>t).sum() for t in fdr_thresholds]})
+
+        # find maximal FDR<5% and FDR<10% sets
+        fdr_5p_t = fdrs[fdrs.fdr <= 0.05].iloc[0].threshold
+        fdr_10p_t = fdrs[fdrs.fdr <= 0.1].iloc[0].threshold
+
+        del gamma_, nullncorrs
+
+    del y_
 
     res = {'p':pfinal, 'nullminps':nullminps, 'k':k, 'ncorrs':ncorrs, 'fdrs':fdrs,
+            'fdr_5p_t':fdr_5p_t, 'fdr_10p_t':fdr_10p_t,
 			'yresid_hat':yhat, 'yresid':ycond}
     return Namespace(**res)
 
-def association(data, y, batches, covs, suffix='', **kwargs):
+def association(data, y, batches, covs, nam_nsteps=None, max_frac_pcs=0.15, suffix='',
+    **kwargs):
     du = data.uns
-    if 'NAM'+suffix not in du:
-        print('NAM not found; computing and saving')
-        nam(data, key_added='NAM'+suffix)
+    npcs = int(max_frac_pcs * len(y))
     if 'NAMqc'+suffix not in du or not np.allclose(batches, du['batches'+suffix]):
         print('qcd NAM not found; computing and saving')
-        NAMqc, keep = _qc(du['NAM'+suffix], batches)
+        NAM = nam(data, nsteps=nam_nsteps)
+        NAMqc, keep = _qc(NAM, batches)
         du['NAMqc'+suffix] = NAMqc
         du['keptcells'+suffix] = keep
         du['batches'+suffix] = batches
@@ -191,7 +200,7 @@ def association(data, y, batches, covs, suffix='', **kwargs):
         NAMsvd, M, r = _prep(du['NAMqc'+suffix], covs, batches)
         du['NAMsvdU'+suffix] = NAMsvd[0]
         du['NAMsvdsvs'+suffix] = NAMsvd[1]
-        du['NAMsvdV'+suffix] = NAMsvd[2]
+        du['NAMsvdV'+suffix] = NAMsvd[2][:,:npcs]
         du['M'+suffix] = M
         du['r'+suffix] = r
         du['covs'+suffix] = (np.zeros(0) if covs is None else covs)

@@ -47,7 +47,7 @@ def tail_counts(z, znull, atol=1e-8, rtol=1e-5):
     # return tail counts for un-sorted z-scores
     return tails[:, iix]
 
-def empirical_fdrs(z, znull):
+def empirical_fdrs(z, znull, thresholds):
     """
     znull is assumed to be of shape len(z) x k, where k is the number of
         null instantiations.
@@ -55,8 +55,8 @@ def empirical_fdrs(z, znull):
     # get tail counts
     if znull.shape[0] != len(z):
         print('ERROR: znull is shape', znull.shape, 'and z is shape', z.shape)
-    tails = tail_counts(z, znull)
-    ranks = len(z) - np.argsort(np.argsort(z**2))
+    tails = tail_counts(thresholds, znull)
+    ranks = tail_counts(thresholds, z)
 
     # compute FWER (superceded by empirical_fwers)
     #fwer = ((tails > 0).sum(axis=0) + 1) / (znull.shape[1] + 1)
