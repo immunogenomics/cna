@@ -1,1 +1,1 @@
-from ._pfm import nfm, cfm, mixedmodel, pca
+from ._pfm import association, nfm, cfm, mixedmodel, pca

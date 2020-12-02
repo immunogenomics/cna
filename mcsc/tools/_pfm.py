@@ -6,10 +6,7 @@ import statsmodels.formula.api as smf
 import scipy.stats as st
 import time, gc
 from argparse import Namespace
-
 import mcsc.tools._stats as stats
-from importlib import reload
-reload(stats)
 
 ###### CNAv2/v3
 # creates a neighborhood abundance matrix
@@ -89,7 +86,7 @@ def _prep(NAM, covs, batches, ridge=None):
             batchcorr = B.T.dot(NAM_ - NAM_.mean(axis=0)) / len(B) / NAM_.std(axis=0)
             maxbatchcorr = np.max(batchcorr**2, axis=0)
 
-            print('with ridge', ridge, 'median max batch correlation =',
+            print('with ridge', ridge, 'median max sq batch correlation =',
                     np.percentile(maxbatchcorr, 50))
 
             if np.percentile(maxbatchcorr, 50) <= 0.025:
@@ -103,7 +100,7 @@ def _prep(NAM, covs, batches, ridge=None):
 
     return (U, sv, V), M, len(C.T)
 
-def _association(NAMsvd, M, r, y, batches, Nnull=1000, local_test=False, seed=None):
+def _association(NAMsvd, M, r, y, batches, Nnull=1000, local_test=True, seed=None):
     if seed is not None:
         np.random.seed(seed)
     ks = np.arange(5,21,5)
@@ -136,7 +133,7 @@ def _association(NAMsvd, M, r, y, batches, Nnull=1000, local_test=False, seed=No
     k, p, ps, = minp_f(y)
 
     # compute final p-value using Nnull null f-test p-values
-    y_ = conditional_permutation(batches, y, Nnull)
+    y_ = stats.conditional_permutation(batches, y, Nnull)
     nullminps = np.array([minp_f(y__)[1] for y__ in y_.T])
     pfinal = ((nullminps <= p+1e-8).sum() + 1)/(Nnull + 1)
 
@@ -149,7 +146,7 @@ def _association(NAMsvd, M, r, y, batches, Nnull=1000, local_test=False, seed=No
     # get neighborhood fdrs if requested
     fdrs, fdr_5p_t, fdr_10p_t = None, None, None
     if local_test:
-        print('computing neighborhood-level FDRs')
+        print('finished global association test; computing neighborhood-level FDRs')
         Nnull = min(1000, Nnull)
         y_ = y_[:,:Nnull]
         ycond_ = M.dot(y_)
@@ -179,23 +176,28 @@ def _association(NAMsvd, M, r, y, batches, Nnull=1000, local_test=False, seed=No
     return Namespace(**res)
 
 def association(data, y, batches, covs, nam_nsteps=None, max_frac_pcs=0.15, suffix='',
-    **kwargs):
+    force_recompute=False, **kwargs):
     du = data.uns
     npcs = int(max_frac_pcs * len(y))
-    if 'NAMqc'+suffix not in du or not np.allclose(batches, du['batches'+suffix]):
+    if force_recompute or \
+        'NAMqc'+suffix not in du or \
+        not np.allclose(batches, du['batches'+suffix]):
         print('qcd NAM not found; computing and saving')
         NAM = nam(data, nsteps=nam_nsteps)
         NAMqc, keep = _qc(NAM, batches)
         du['NAMqc'+suffix] = NAMqc
         du['keptcells'+suffix] = keep
         du['batches'+suffix] = batches
+
     def samecovs(A, B):
         if A is None: A = np.zeros(0)
         if A.shape == B.shape:
             return np.allclose(A, B)
         else:
             return False
-    if 'NAMsvdU'+suffix not in du or not samecovs(covs, du['covs'+suffix]):
+    if force_recompute or \
+        'NAMsvdU'+suffix not in du or \
+        not samecovs(covs, du['covs'+suffix]):
         print('covariate-adjusted NAM not found; computing and saving')
         NAMsvd, M, r = _prep(du['NAMqc'+suffix], covs, batches)
         du['NAMsvdU'+suffix] = NAMsvd[0]
@@ -205,9 +207,15 @@ def association(data, y, batches, covs, nam_nsteps=None, max_frac_pcs=0.15, suff
         du['r'+suffix] = r
         du['covs'+suffix] = (np.zeros(0) if covs is None else covs)
 
+    # do association test
     NAMsvd = (du['NAMsvdU'+suffix], du['NAMsvdsvs'+suffix], du['NAMsvdV'+suffix])
-    return _association(NAMsvd, du['M'+suffix], du['r'+suffix],
+    res = _association(NAMsvd, du['M'+suffix], du['r'+suffix],
                         y, batches, **kwargs)
+
+    # add info about kept cells
+    vars(res)['kept'] = du['keptcells'+suffix]
+
+    return res
 
 ###### CNAv1
 # creates a neighborhood abundance matrix
