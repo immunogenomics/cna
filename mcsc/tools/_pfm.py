@@ -40,7 +40,8 @@ def _qc(NAM, batches):
     N = len(NAM)
     if len(np.unique(batches)) == 1:
         print('warning: only one unique batch supplied to qc')
-        return
+        keep = np.repeat(True, NAM.shape[0]) #Modified
+        return NAM, keep #Modified
 
     B = pd.get_dummies(batches).values
     B = (B - B.mean(axis=0))/B.std(axis=0)
@@ -68,6 +69,7 @@ def _prep(NAM, covs, batches, ridge=None):
             M = np.eye(N)
         else:
             M = np.eye(N) - C.dot(np.linalg.solve(C.T.dot(C), C.T))
+        NAM_ = M.dot(NAM) #Modified
     else:
         B = pd.get_dummies(batches).values
         B = (B - B.mean(axis=0))/B.std(axis=0)
