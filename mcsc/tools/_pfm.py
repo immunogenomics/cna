@@ -105,7 +105,8 @@ def _prep(NAM, covs, batches, ridge=None):
 def _association(NAMsvd, M, r, y, batches, Nnull=1000, local_test=True, seed=None):
     if seed is not None:
         np.random.seed(seed)
-    ks = np.arange(5,21,5)
+    ks = np.unique(np.ceil(y.shape[0]*np.arange(0.02,0.09, 0.02)).astype(int)) #Modified
+    #TODO: add parameter for user to set ks, default None, if None set values as above
 
     # prep data
     n = len(y)
@@ -165,8 +166,14 @@ def _association(NAMsvd, M, r, y, batches, Nnull=1000, local_test=True, seed=Non
             'num_detected': [(np.abs(ncorrs)>t).sum() for t in fdr_thresholds]})
 
         # find maximal FDR<5% and FDR<10% sets
-        fdr_5p_t = fdrs[fdrs.fdr <= 0.05].iloc[0].threshold
-        fdr_10p_t = fdrs[fdrs.fdr <= 0.1].iloc[0].threshold
+        if np.min(fdrs.fdr)>0.05:  #Modified
+            fdr_5p_t = None #Modified 
+        else: #Modified 
+            fdr_5p_t = fdrs[fdrs.fdr <= 0.05].iloc[0].threshold #Modified 
+        if np.min(fdrs.fdr)>0.1: #Modified 
+            fdr_10p_t = None #Modified 
+        else: #Modified 
+            fdr_10p_t = fdrs[fdrs.fdr <= 0.1].iloc[0].threshold #Modified 
 
         del gamma_, nullncorrs
 
@@ -180,7 +187,7 @@ def _association(NAMsvd, M, r, y, batches, Nnull=1000, local_test=True, seed=Non
 def association(data, y, batches, covs, nam_nsteps=None, max_frac_pcs=0.15, suffix='',
     force_recompute=False, **kwargs):
     du = data.uns
-    npcs = int(max_frac_pcs * len(y))
+    npcs = np.max([10, int(max_frac_pcs * len(y))]) #Modified 
     if force_recompute or \
         'NAMqc'+suffix not in du or \
         not np.allclose(batches, du['batches'+suffix]):
