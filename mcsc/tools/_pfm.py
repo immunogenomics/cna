@@ -190,7 +190,7 @@ def _association(NAMsvd, M, r, y, batches, ks=None, Nnull=1000, local_test=True,
 def association(data, y, batches, covs, nam_nsteps=None, max_frac_pcs=0.15, suffix='',
     force_recompute=False, **kwargs):
     du = data.uns
-    npcs = np.max([10, int(max_frac_pcs * len(y))]) #Modified 
+    npcs = np.max([10, int(max_frac_pcs * len(y))])
     if force_recompute or \
         'NAMqc'+suffix not in du or \
         not np.allclose(batches, du['batches'+suffix]):
