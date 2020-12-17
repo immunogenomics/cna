@@ -57,8 +57,9 @@ def _qc(NAM, batches):
 
 def _prep(NAM, covs, batches, ridge=None):
     N = len(NAM)
+    NAM_ = NAM - NAM.mean(axis=0)
     if covs is None:
-        covs = np.zeros((N, 0))
+        covs = np.ones((N, 0))
     else:
         covs = (covs - covs.mean(axis=0))/covs.std(axis=0)
 
@@ -69,7 +70,7 @@ def _prep(NAM, covs, batches, ridge=None):
             M = np.eye(N)
         else:
             M = np.eye(N) - C.dot(np.linalg.solve(C.T.dot(C), C.T))
-        NAM_ = M.dot(NAM)
+        NAM_ = M.dot(NAM_)
     else:
         B = pd.get_dummies(batches).values
         B = (B - B.mean(axis=0))/B.std(axis=0)
@@ -83,7 +84,7 @@ def _prep(NAM, covs, batches, ridge=None):
         for ridge in ridges:
             L = np.diag([1]*len(B.T)+[0]*(len(C.T)-len(B.T)))
             M = np.eye(N) - C.dot(np.linalg.solve(C.T.dot(C) + ridge*len(C)*L, C.T))
-            NAM_ = M.dot(NAM)
+            NAM_ = M.dot(NAM_)
 
             batchcorr = B.T.dot(NAM_ - NAM_.mean(axis=0)) / len(B) / NAM_.std(axis=0)
             maxbatchcorr = np.max(batchcorr**2, axis=0)
@@ -101,14 +102,16 @@ def _prep(NAM, covs, batches, ridge=None):
 
     return (U, sv, V), M, len(C.T)
 
-def _association(NAMsvd, M, r, y, batches, Nnull=1000, local_test=True, seed=None):
+def _association(NAMsvd, M, r, y, batches, ks=None, Nnull=1000, local_test=True, seed=None):
     if seed is not None:
         np.random.seed(seed)
-    ks = np.unique(np.ceil(y.shape[0]*np.arange(0.02,0.09, 0.02)).astype(int)) #Modified
-    #TODO: add parameter for user to set ks, default None, if None set values as above
+    n = len(y)
+    if ks is None:
+        incr = max(int(0.02*n), 1)
+        maxnpcs = min(4*incr, int(n/5))
+        ks = np.arange(incr, maxnpcs+1, incr)
 
     # prep data
-    n = len(y)
     (U, sv, V) = NAMsvd
     y = (y - y.mean())/y.std()
 
@@ -130,6 +133,7 @@ def _association(NAMsvd, M, r, y, batches, Nnull=1000, local_test=True, seed=Non
         zcond = zcond / zcond.std()
         ps = np.array([ftest(reg(zcond, k)[0], zcond, k) for k in ks])
         return ks[np.argmin(ps)], ps[np.argmin(ps)], ps
+    # TODO: return correlation btwn ycond and yhat
 
     # get non-null f-test p-value
     k, p, ps, = minp_f(y)
@@ -148,7 +152,7 @@ def _association(NAMsvd, M, r, y, batches, Nnull=1000, local_test=True, seed=Non
     # get neighborhood fdrs if requested
     fdrs, fdr_5p_t, fdr_10p_t = None, None, None
     if local_test:
-        print('finished global association test; computing neighborhood-level FDRs')
+        print('computing neighborhood-level FDRs')
         Nnull = min(1000, Nnull)
         y_ = y_[:,:Nnull]
         ycond_ = M.dot(y_)
@@ -180,7 +184,7 @@ def _association(NAMsvd, M, r, y, batches, Nnull=1000, local_test=True, seed=Non
 
     res = {'p':pfinal, 'nullminps':nullminps, 'k':k, 'ncorrs':ncorrs, 'fdrs':fdrs,
             'fdr_5p_t':fdr_5p_t, 'fdr_10p_t':fdr_10p_t,
-			'yresid_hat':yhat, 'yresid':ycond}
+			'yresid_hat':yhat, 'yresid':ycond, 'ks':ks}
     return Namespace(**res)
 
 def association(data, y, batches, covs, nam_nsteps=None, max_frac_pcs=0.15, suffix='',
