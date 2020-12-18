@@ -113,6 +113,9 @@ def _association(NAMsvd, M, r, y, batches, ks=None, Nnull=1000, local_test=True,
 
     # prep data
     (U, sv, V) = NAMsvd
+    notnan = ~np.isnan(y)
+    y = y[notnan]; batches = batches[notnan]
+    U = U[notnan]; M = M[notnan][:,notnan] #TODO: think a bit more about how to interpret
     y = (y - y.mean())/y.std()
 
     def reg(q, k):
