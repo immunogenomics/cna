@@ -10,13 +10,13 @@ import mcsc.tools._stats as stats
 
 ###### CNAv2/v3
 # creates a neighborhood abundance matrix
-#   requires data.uns[sampleXmeta][ncellsid] to contain the number of cells in each sample.
-#   this can be obtained using mcsc.pp.sample_size
-def nam(data, nsteps=None, sampleXmeta='sampleXmeta', ncellsid='C'):
+#   requires data.uns[sampleXmeta].index to contain sample ids that match d.obs[sampleid]
+def nam(data, nsteps=None, sampleXmeta='sampleXmeta', sampleid='id'):
+    sm = data.uns[sampleXmeta]
     a = data.uns['neighbors']['connectivities']
-    C = data.uns[sampleXmeta][ncellsid].values
+    s = pd.get_dummies(data.obs[sampleid])[sm.index.values]
+    C = s.sum(axis=0)
     colsums = np.array(a.sum(axis=0)).flatten() + 1
-    s = np.repeat(np.eye(len(C)), C, axis=0)
 
     prevmedkurt = np.inf
     for i in range(15):
@@ -33,8 +33,9 @@ def nam(data, nsteps=None, sampleXmeta='sampleXmeta', ncellsid='C'):
         elif i+1 == nsteps:
             break
 
-    snorm = s / C
-    return snorm.T
+    snorm = (s / C).T
+    snorm.index.name = sampleid
+    return snorm
 
 def _qc(NAM, batches):
     N = len(NAM)
@@ -193,14 +194,14 @@ def _association(NAMsvd, M, r, y, batches, ks=None, Nnull=1000, local_test=True,
 def association(data, y, batches, covs, nam_nsteps=None, max_frac_pcs=0.15, suffix='',
     force_recompute=False, **kwargs):
     du = data.uns
-    npcs = np.max([10, int(max_frac_pcs * len(y))])
+    npcs = max(10, int(max_frac_pcs * len(y)))
     if force_recompute or \
         'NAMqc'+suffix not in du or \
         not np.allclose(batches, du['batches'+suffix]):
         print('qcd NAM not found; computing and saving')
         NAM = nam(data, nsteps=nam_nsteps)
-        NAMqc, keep = _qc(NAM, batches)
-        du['NAMqc'+suffix] = NAMqc
+        NAMqc, keep = _qc(NAM.values, batches)
+        du['NAMqc'+suffix] = pd.DataFrame(NAMqc, index=NAM.index, columns=NAM.columns[keep])
         du['keptcells'+suffix] = keep
         du['batches'+suffix] = batches
 
@@ -214,16 +215,19 @@ def association(data, y, batches, covs, nam_nsteps=None, max_frac_pcs=0.15, suff
         'NAMsvdU'+suffix not in du or \
         not samecovs(covs, du['covs'+suffix]):
         print('covariate-adjusted NAM not found; computing and saving')
-        NAMsvd, M, r = _prep(du['NAMqc'+suffix], covs, batches)
-        du['NAMsvdU'+suffix] = NAMsvd[0]
+        NAMqc = du['NAMqc'+suffix]
+        NAMsvd, M, r = _prep(NAMqc.values, covs, batches)
+        du['NAMsvdU'+suffix] = pd.DataFrame(NAMsvd[0], index=NAMqc.index)
         du['NAMsvdsvs'+suffix] = NAMsvd[1]
-        du['NAMsvdV'+suffix] = NAMsvd[2][:,:npcs]
+        du['NAMsvdV'+suffix] = pd.DataFrame(NAMsvd[2][:,:npcs], index=NAMqc.columns)
         du['M'+suffix] = M
         du['r'+suffix] = r
         du['covs'+suffix] = (np.zeros(0) if covs is None else covs)
 
     # do association test
-    NAMsvd = (du['NAMsvdU'+suffix], du['NAMsvdsvs'+suffix], du['NAMsvdV'+suffix])
+    NAMsvd = (du['NAMsvdU'+suffix].values,
+                du['NAMsvdsvs'+suffix],
+                du['NAMsvdV'+suffix].values)
     res = _association(NAMsvd, du['M'+suffix], du['r'+suffix],
                         y, batches, **kwargs)
 

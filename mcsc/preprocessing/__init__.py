@@ -1,1 +1,2 @@
-from ._multisample import sortedcopy, issorted, sample_size
+from ._multisample import cell_to_sample, sample_sizes
+from ._knn import knn
