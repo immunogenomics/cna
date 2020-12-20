@@ -8,18 +8,20 @@ import time, gc
 from argparse import Namespace
 import mcsc.tools._stats as stats
 
-def diffuse(data, s, nsteps, iterate=True):
+def diffuse_stepwise(data, s, maxnsteps=15):
     a = data.uns['neighbors']['connectivities']
     colsums = np.array(a.sum(axis=0)).flatten() + 1
 
-    for i in range(nsteps):
+    for i in range(maxnsteps):
         print('taking step', i+1)
         s = a.dot(s/colsums[:,None]) + s/colsums[:,None]
+        yield s
 
-        if iterate:
-            yield s
-
+def diffuse(data, s, nsteps):
+    for s in diffuse_stepwise(data, s, maxnsteps=nsteps):
+        pass
     return s
+
 # creates a neighborhood abundance matrix
 #   requires data.uns[sampleXmeta].index to contain sample ids that match d.obs[sampleid]
 def nam(data, nsteps=None, maxnsteps=15, sampleXmeta='sampleXmeta', sampleid='id'):
@@ -28,7 +30,7 @@ def nam(data, nsteps=None, maxnsteps=15, sampleXmeta='sampleXmeta', sampleid='id
     C = s.sum(axis=0)
 
     prevmedkurt = np.inf
-    for i, s in enumerate(diffuse(data, s, maxnsteps)):
+    for i, s in enumerate(diffuse_stepwise(data, s, maxnsteps=maxnsteps)):
         if nsteps is None:
             medkurt = np.median(st.kurtosis(s/C, axis=1))
             print('median excess kurtosis:', medkurt)
