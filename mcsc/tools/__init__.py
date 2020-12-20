@@ -1,1 +1,1 @@
-from ._pfm import association, nam
+from ._nam import association, nam, diffuse

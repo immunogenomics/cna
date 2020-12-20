@@ -8,25 +8,31 @@ import time, gc
 from argparse import Namespace
 import mcsc.tools._stats as stats
 
-###### CNAv2/v3
-# creates a neighborhood abundance matrix
-#   requires data.uns[sampleXmeta].index to contain sample ids that match d.obs[sampleid]
-def nam(data, nsteps=None, sampleXmeta='sampleXmeta', sampleid='id'):
-    sm = data.uns[sampleXmeta]
+def diffuse(data, s, nsteps, iterate=True):
     a = data.uns['neighbors']['connectivities']
-    s = pd.get_dummies(data.obs[sampleid])[sm.index.values]
-    C = s.sum(axis=0)
     colsums = np.array(a.sum(axis=0)).flatten() + 1
 
-    prevmedkurt = np.inf
-    for i in range(15):
+    for i in range(nsteps):
         print('taking step', i+1)
         s = a.dot(s/colsums[:,None]) + s/colsums[:,None]
 
+        if iterate:
+            yield s
+
+    return s
+# creates a neighborhood abundance matrix
+#   requires data.uns[sampleXmeta].index to contain sample ids that match d.obs[sampleid]
+def nam(data, nsteps=None, maxnsteps=15, sampleXmeta='sampleXmeta', sampleid='id'):
+    sm = data.uns[sampleXmeta]
+    s = pd.get_dummies(data.obs[sampleid])[sm.index.values]
+    C = s.sum(axis=0)
+
+    prevmedkurt = np.inf
+    for i, s in enumerate(diffuse(data, s, maxnsteps)):
         if nsteps is None:
             medkurt = np.median(st.kurtosis(s/C, axis=1))
             print('median excess kurtosis:', medkurt)
-            if prevmedkurt - medkurt < 3:
+            if prevmedkurt - medkurt < 3 and i+1 >= 3:
                 print('stopping after', i+1, 'steps')
                 break
             prevmedkurt = medkurt
