@@ -1,9 +1,6 @@
 import numpy as np
 import pandas as pd
 import scipy.stats as st
-import statsmodels.api as sm
-import statsmodels.formula.api as smf
-import scipy.stats as st
 import time, gc
 from argparse import Namespace
 import mcsc.tools._stats as stats
@@ -23,10 +20,9 @@ def diffuse(data, s, nsteps):
     return s
 
 # creates a neighborhood abundance matrix
-#   requires data.uns[sampleXmeta].index to contain sample ids that match d.obs[sampleid]
-def nam(data, nsteps=None, maxnsteps=15, sampleXmeta='sampleXmeta', sampleid='id'):
-    sm = data.uns[sampleXmeta]
-    s = pd.get_dummies(data.obs[sampleid])[sm.index.values]
+#   requires data.samplem.index to contain sample ids that match d.obs[sampleid]
+def nam(data, nsteps=None, maxnsteps=15, sampleid='id'):
+    s = pd.get_dummies(data.obs[sampleid])[data.samplem.index.values]
     C = s.sum(axis=0)
 
     prevmedkurt = np.inf
