@@ -4,6 +4,7 @@ import numpy as np
 
 class MultiSampleAnnData(ad.AnnData):
     #TODO: add __init__ that checks that samplem and d.obs.id have matching information
+    #TODO create an attribute that allows access to the sample id column of data.obs
 
     @property
     def samplem(self):
