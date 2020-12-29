@@ -1,9 +1,9 @@
 import numpy as np
 import pandas as pd
 import scipy.stats as st
-import time, gc
+import gc
 from argparse import Namespace
-import mcsc.tools._stats as stats
+import cna.tools._stats as stats
 
 def diffuse_stepwise(data, s, maxnsteps=15):
     a = data.uns['neighbors']['connectivities']
