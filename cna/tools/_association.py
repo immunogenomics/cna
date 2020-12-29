@@ -30,7 +30,7 @@ def _association(NAMsvd, M, r, y, batches, ks=None, Nnull=1000, local_test=True,
 
     def _r2(q, k):
         qhat, _ = _reg(q, k)
-        return ((q - q.mean()).dot(qhat - qhat.mean()) / q.std() / qhat.std())**2
+        return ((q - q.mean()).dot(qhat - qhat.mean()) / q.std() / qhat.std() / len(q))**2
 
     def _ftest(yhat, ycond, k):
         ssefull = (yhat - ycond).dot(yhat - ycond)
@@ -59,6 +59,7 @@ def _association(NAMsvd, M, r, y, batches, ks=None, Nnull=1000, local_test=True,
     ycond = M.dot(y)
     ycond /= ycond.std()
     yhat, beta = _reg(ycond, k)
+    r2_perpc = (beta / np.sqrt(len(ycond)))**2
     r2 = _r2(ycond, k)
 
     # get neighborhood scores with chosen model
@@ -104,7 +105,8 @@ def _association(NAMsvd, M, r, y, batches, ks=None, Nnull=1000, local_test=True,
 
     res = {'p':pfinal, 'nullminps':nullminps, 'k':k, 'ncorrs':ncorrs, 'fdrs':fdrs,
             'fdr_5p_t':fdr_5p_t, 'fdr_10p_t':fdr_10p_t,
-			'yresid_hat':yhat, 'yresid':ycond, 'ks':ks, 'beta':beta, 'r2':r2}
+			'yresid_hat':yhat, 'yresid':ycond, 'ks':ks, 'beta':beta,
+            'r2':r2, 'r2_perpc':r2_perpc}
     return Namespace(**res)
 
 def association(data, y, batches=None, covs=None, nsteps=None, suffix='',
