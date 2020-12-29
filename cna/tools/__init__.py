@@ -1,1 +1,2 @@
-from ._nam import association, nam, diffuse, diffuse_stepwise
+from ._nam import nam, diffuse, diffuse_stepwise
+from ._association import association

@@ -1,16 +1,13 @@
 import numpy as np
 import pandas as pd
 import scipy.stats as st
-import gc
-from argparse import Namespace
-import cna.tools._stats as stats
 
 def diffuse_stepwise(data, s, maxnsteps=15):
     a = data.uns['neighbors']['connectivities']
     colsums = np.array(a.sum(axis=0)).flatten() + 1
 
     for i in range(maxnsteps):
-        print('taking step', i+1)
+        print('\ttaking step', i+1)
         s = a.dot(s/colsums[:,None]) + s/colsums[:,None]
         yield s
 
@@ -19,17 +16,25 @@ def diffuse(data, s, nsteps):
         pass
     return s
 
+def _df_to_array(data, x):
+    if type(x) == pd.DataFrame:
+        if x.index == data.samplem.index:
+            return x.values
+        else:
+            print('ERROR: index does not match index of data.samplem')
+    else:
+        return x
+
 # creates a neighborhood abundance matrix
-#   requires data.samplem.index to contain sample ids that match d.obs[sampleid]
-def nam(data, nsteps=None, maxnsteps=15, sampleid='id'):
-    s = pd.get_dummies(data.obs[sampleid])[data.samplem.index.values]
+def _nam(data, nsteps=None, maxnsteps=15):
+    s = pd.get_dummies(data.obs_sampleids)[data.samplem.index.values]
     C = s.sum(axis=0)
 
     prevmedkurt = np.inf
     for i, s in enumerate(diffuse_stepwise(data, s, maxnsteps=maxnsteps)):
+        medkurt = np.median(st.kurtosis(s/C, axis=1))
+        print('\tmedian excess kurtosis:', medkurt)
         if nsteps is None:
-            medkurt = np.median(st.kurtosis(s/C, axis=1))
-            print('median excess kurtosis:', medkurt)
             if prevmedkurt - medkurt < 3 and i+1 >= 3:
                 print('stopping after', i+1, 'steps')
                 break
@@ -38,10 +43,11 @@ def nam(data, nsteps=None, maxnsteps=15, sampleid='id'):
             break
 
     snorm = (s / C).T
-    snorm.index.name = sampleid
+    snorm.index.name = data.samplem.index.name
     return snorm
 
-def _qc(NAM, batches):
+#qcs a NAM to remove neighborhoods that are batchy
+def _qc_nam(NAM, batches):
     N = len(NAM)
     if len(np.unique(batches)) == 1:
         print('warning: only one unique batch supplied to qc')
@@ -60,7 +66,8 @@ def _qc(NAM, batches):
 
     return NAM[:, keep], keep
 
-def _prep(NAM, covs, batches, ridge=None):
+# residualizes covariates and batch information out of NAM
+def _resid_nam(NAM, covs, batches, ridge=None):
     N = len(NAM)
     NAM_ = NAM - NAM.mean(axis=0)
     if covs is None:
@@ -68,7 +75,7 @@ def _prep(NAM, covs, batches, ridge=None):
     else:
         covs = (covs - covs.mean(axis=0))/covs.std(axis=0)
 
-    if len(np.unique(batches)) == 1:
+    if batches is None or len(np.unique(batches)) == 1:
         print('warning: only one unique batch supplied to prep')
         C = covs
         if len(C.T) == 0:
@@ -94,117 +101,36 @@ def _prep(NAM, covs, batches, ridge=None):
             batchcorr = B.T.dot(NAM_ - NAM_.mean(axis=0)) / len(B) / NAM_.std(axis=0)
             maxbatchcorr = np.max(batchcorr**2, axis=0)
 
-            print('with ridge', ridge, 'median max sq batch correlation =',
+            print('\twith ridge', ridge, 'median max sq batch correlation =',
                     np.percentile(maxbatchcorr, 50))
 
             if np.percentile(maxbatchcorr, 50) <= 0.025:
                 break
 
-    NAM_ = NAM_ / NAM_.std(axis=0)
+    return NAM_ / NAM_.std(axis=0), M, len(C.T)
 
-    U, sv, UT = np.linalg.svd(NAM_.dot(NAM_.T))
-    V = NAM_.T.dot(U) / np.sqrt(sv)
+#performs SVD of NAM
+def _svd_nam(NAM):
+    U, svs, UT = np.linalg.svd(NAM.dot(NAM.T))
+    V = NAM.T.dot(U) / np.sqrt(svs)
 
-    return (U, sv, V), M, len(C.T)
+    return (U, svs, V)
 
-def _association(NAMsvd, M, r, y, batches, ks=None, Nnull=1000, local_test=True, seed=None):
-    if seed is not None:
-        np.random.seed(seed)
-    n = len(y)
-    if ks is None:
-        incr = max(int(0.02*n), 1)
-        maxnpcs = min(4*incr, int(n/5))
-        ks = np.arange(incr, maxnpcs+1, incr)
-
-    # prep data
-    (U, sv, V) = NAMsvd
-    notnan = ~np.isnan(y)
-    y = y[notnan]; batches = batches[notnan]
-    U = U[notnan]; M = M[notnan][:,notnan] #TODO: think a bit more about how to interpret
-    y = (y - y.mean())/y.std()
-
-    def reg(q, k):
-        Xpc = U[:,:k]
-        gamma = Xpc.T.dot(q)
-        qhat = Xpc.dot(gamma)
-        return qhat, gamma
-
-    def ftest(yhat, ycond, k):
-        ssefull = (yhat - ycond).dot(yhat - ycond)
-        ssered = ycond.dot(ycond)
-        deltasse =  ssered - ssefull
-        f = (deltasse / k) / (ssefull/n)
-        return st.f.sf(f, k, n-(1+r+k))
-
-    def minp_f(z):
-        zcond = M.dot(z)
-        zcond = zcond / zcond.std()
-        ps = np.array([ftest(reg(zcond, k)[0], zcond, k) for k in ks])
-        return ks[np.argmin(ps)], ps[np.argmin(ps)], ps
-    # TODO: return correlation btwn ycond and yhat
-
-    # get non-null f-test p-value
-    k, p, ps, = minp_f(y)
-
-    # compute final p-value using Nnull null f-test p-values
-    y_ = stats.conditional_permutation(batches, y, Nnull)
-    nullminps = np.array([minp_f(y__)[1] for y__ in y_.T])
-    pfinal = ((nullminps <= p+1e-8).sum() + 1)/(Nnull + 1)
-
-    # get neighborhood scores
-    ycond = M.dot(y)
-    ycond /= ycond.std()
-    yhat, gamma = reg(ycond, k)
-    ncorrs = (np.sqrt(sv[:k])*gamma/n).dot(V[:,:k].T)
-
-    # get neighborhood fdrs if requested
-    fdrs, fdr_5p_t, fdr_10p_t = None, None, None
-    if local_test:
-        print('computing neighborhood-level FDRs')
-        Nnull = min(1000, Nnull)
-        y_ = y_[:,:Nnull]
-        ycond_ = M.dot(y_)
-        ycond_ /= ycond_.std(axis=0)
-        gamma_ = U[:,:k].T.dot(ycond_) / len(ycond_)
-        nullncorrs = np.abs(V[:,:k].dot(np.sqrt(sv[:k])[:,None]*gamma_))
-
-        fdr_thresholds = np.arange(np.abs(ncorrs).max()/4, np.abs(ncorrs).max(), 0.005)
-        fdr_vals = stats.empirical_fdrs(ncorrs, nullncorrs, fdr_thresholds)
-
-        fdrs = pd.DataFrame({
-            'threshold':fdr_thresholds,
-            'fdr':fdr_vals,
-            'num_detected': [(np.abs(ncorrs)>t).sum() for t in fdr_thresholds]})
-
-        # find maximal FDR<5% and FDR<10% sets
-        if np.min(fdrs.fdr)>0.05:
-            fdr_5p_t = None
-        else:
-            fdr_5p_t = fdrs[fdrs.fdr <= 0.05].iloc[0].threshold
-        if np.min(fdrs.fdr)>0.1:
-            fdr_10p_t = None
-        else:
-            fdr_10p_t = fdrs[fdrs.fdr <= 0.1].iloc[0].threshold
-
-        del gamma_, nullncorrs
-
-    del y_
-
-    res = {'p':pfinal, 'nullminps':nullminps, 'k':k, 'ncorrs':ncorrs, 'fdrs':fdrs,
-            'fdr_5p_t':fdr_5p_t, 'fdr_10p_t':fdr_10p_t,
-			'yresid_hat':yhat, 'yresid':ycond, 'ks':ks}
-    return Namespace(**res)
-
-def association(data, y, batches, covs, nam_nsteps=None, max_frac_pcs=0.15, suffix='',
+def nam(data, batches=None, covs=None, nsteps=None, max_frac_pcs=0.15, suffix='',
     force_recompute=False, **kwargs):
+
+    # error checking
+    covs = _df_to_array(data, covs)
+    batches = _df_to_array(data, batches)
+
     du = data.uns
-    npcs = max(10, int(max_frac_pcs * len(y)))
+    npcs = max(10, int(max_frac_pcs * len(data.samplem)))
     if force_recompute or \
         'NAMqc'+suffix not in du or \
         not np.allclose(batches, du['batches'+suffix]):
         print('qcd NAM not found; computing and saving')
-        NAM = nam(data, nsteps=nam_nsteps)
-        NAMqc, keep = _qc(NAM.values, batches)
+        NAM = _nam(data, nsteps=nsteps)
+        NAMqc, keep = _qc_nam(NAM.values, batches)
         du['NAMqc'+suffix] = pd.DataFrame(NAMqc, index=NAM.index, columns=NAM.columns[keep])
         du['keptcells'+suffix] = keep
         du['batches'+suffix] = batches
@@ -216,26 +142,21 @@ def association(data, y, batches, covs, nam_nsteps=None, max_frac_pcs=0.15, suff
         else:
             return False
     if force_recompute or \
-        'NAMsvdU'+suffix not in du or \
+        'NAM_sampleXpc'+suffix not in du or \
         not samecovs(covs, du['covs'+suffix]):
         print('covariate-adjusted NAM not found; computing and saving')
         NAMqc = du['NAMqc'+suffix]
-        NAMsvd, M, r = _prep(NAMqc.values, covs, batches)
-        du['NAMsvdU'+suffix] = pd.DataFrame(NAMsvd[0], index=NAMqc.index)
-        du['NAMsvdsvs'+suffix] = NAMsvd[1]
-        du['NAMsvdV'+suffix] = pd.DataFrame(NAMsvd[2][:,:npcs], index=NAMqc.columns)
+        NAMqc_resid, M, r = _resid_nam(NAMqc.values, covs, batches)
+        print('computing SVD')
+        U, svs, V = _svd_nam(NAMqc_resid)
+        du['NAM_sampleXpc'+suffix] = pd.DataFrame(U,
+            index=NAMqc.index,
+            columns=['PC'+str(i) for i in range(len(U.T))])
+        du['NAM_svs'+suffix] = pd.Series(svs,
+            index=['PC'+str(i) for i in range(len(U.T))])
+        du['NAM_nbhdXpc'+suffix] = pd.DataFrame(V[:,:npcs],
+            index=NAMqc.columns,
+            columns=['PC'+str(i) for i in range(npcs)])
         du['M'+suffix] = M
         du['r'+suffix] = r
         du['covs'+suffix] = (np.zeros(0) if covs is None else covs)
-
-    # do association test
-    NAMsvd = (du['NAMsvdU'+suffix].values,
-                du['NAMsvdsvs'+suffix],
-                du['NAMsvdV'+suffix].values)
-    res = _association(NAMsvd, du['M'+suffix], du['r'+suffix],
-                        y, batches, **kwargs)
-
-    # add info about kept cells
-    vars(res)['kept'] = du['keptcells'+suffix]
-
-    return res
