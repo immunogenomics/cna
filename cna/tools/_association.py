@@ -69,6 +69,9 @@ def _association(NAMsvd, M, r, y, batches, ks=None, Nnull=1000, local_test=True,
     y_ = stats.conditional_permutation(batches, y, Nnull)
     nullminps = np.array([_minp_f(y__)[1] for y__ in y_.T])
     pfinal = ((nullminps <= p+1e-8).sum() + 1)/(Nnull + 1)
+    if (nullminps <= p+1e-8).sum() == 0:
+        print('warning: global association p-value attained minimal possible value. '+\
+                'Consider increasing Nnull')
 
     # get neighborhood fdrs if requested
     fdrs, fdr_5p_t, fdr_10p_t = None, None, None
