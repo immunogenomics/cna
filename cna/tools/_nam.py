@@ -124,7 +124,7 @@ def nam(data, batches=None, covs=None, nsteps=None, max_frac_pcs=0.15, suffix=''
     batches = _df_to_array(data, batches)
 
     du = data.uns
-    npcs = max(10, int(max_frac_pcs * len(data.samplem)))
+    npcs = max(10, int(max_frac_pcs * data.N))
     if force_recompute or \
         'NAM.T'+suffix not in du or \
         not np.allclose(batches, du['_batches'+suffix]):
