@@ -127,7 +127,7 @@ def association(data, y, batches=None, covs=None, nsteps=None, suffix='',
                     force_recompute=force_recompute)
     NAMsvd = (
         du['NAM_sampleXpc'+suffix].values,
-        du['NAM_svs'+suffix].values,
+        du['NAM_svs'+suffix],
         du['NAM_nbhdXpc'+suffix].values
         )
     res = _association(NAMsvd, du['M'+suffix], du['r'+suffix], y, batches, **kwargs)

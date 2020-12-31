@@ -17,8 +17,8 @@ def diffuse(data, s, nsteps):
     return s
 
 def _df_to_array(data, x):
-    if type(x) == pd.DataFrame:
-        if x.index == data.samplem.index:
+    if type(x) in [pd.DataFrame, pd.Series]:
+        if all(x.index == data.samplem.index):
             return x.values
         else:
             print('ERROR: index does not match index of data.samplem')
@@ -126,12 +126,12 @@ def nam(data, batches=None, covs=None, nsteps=None, max_frac_pcs=0.15, suffix=''
     du = data.uns
     npcs = max(10, int(max_frac_pcs * len(data.samplem)))
     if force_recompute or \
-        'NAMqc'+suffix not in du or \
+        'NAM.T'+suffix not in du or \
         not np.allclose(batches, du['batches'+suffix]):
         print('qcd NAM not found; computing and saving')
         NAM = _nam(data, nsteps=nsteps)
         NAMqc, keep = _qc_nam(NAM.values, batches)
-        du['NAMqc'+suffix] = pd.DataFrame(NAMqc, index=NAM.index, columns=NAM.columns[keep])
+        du['NAM.T'+suffix] = pd.DataFrame(NAMqc, index=NAM.index, columns=NAM.columns[keep]).T
         du['keptcells'+suffix] = keep
         du['batches'+suffix] = batches
 
@@ -145,17 +145,16 @@ def nam(data, batches=None, covs=None, nsteps=None, max_frac_pcs=0.15, suffix=''
         'NAM_sampleXpc'+suffix not in du or \
         not samecovs(covs, du['covs'+suffix]):
         print('covariate-adjusted NAM not found; computing and saving')
-        NAMqc = du['NAMqc'+suffix]
-        NAMqc_resid, M, r = _resid_nam(NAMqc.values, covs, batches)
+        NAM = du['NAM.T'+suffix].T
+        NAM_resid, M, r = _resid_nam(NAM.values, covs, batches)
         print('computing SVD')
-        U, svs, V = _svd_nam(NAMqc_resid)
+        U, svs, V = _svd_nam(NAM_resid)
         du['NAM_sampleXpc'+suffix] = pd.DataFrame(U,
-            index=NAMqc.index,
+            index=NAM.index,
             columns=['PC'+str(i) for i in range(len(U.T))])
-        du['NAM_svs'+suffix] = pd.Series(svs,
-            index=['PC'+str(i) for i in range(len(U.T))])
+        du['NAM_svs'+suffix] = svs
         du['NAM_nbhdXpc'+suffix] = pd.DataFrame(V[:,:npcs],
-            index=NAMqc.columns,
+            index=NAM.columns,
             columns=['PC'+str(i) for i in range(npcs)])
         du['M'+suffix] = M
         du['r'+suffix] = r
