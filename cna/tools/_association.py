@@ -130,7 +130,7 @@ def association(data, y, batches=None, covs=None, nsteps=None, suffix='',
         du['NAM_svs'+suffix],
         du['NAM_nbhdXpc'+suffix].values
         )
-    res = _association(NAMsvd, du['M'+suffix], du['r'+suffix], y, batches, **kwargs)
+    res = _association(NAMsvd, du['_M'+suffix], du['_r'+suffix], y, batches, **kwargs)
 
     # add info about kept cells
     vars(res)['kept'] = du['keptcells'+suffix]

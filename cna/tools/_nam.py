@@ -127,13 +127,13 @@ def nam(data, batches=None, covs=None, nsteps=None, max_frac_pcs=0.15, suffix=''
     npcs = max(10, int(max_frac_pcs * len(data.samplem)))
     if force_recompute or \
         'NAM.T'+suffix not in du or \
-        not np.allclose(batches, du['batches'+suffix]):
+        not np.allclose(batches, du['_batches'+suffix]):
         print('qcd NAM not found; computing and saving')
         NAM = _nam(data, nsteps=nsteps)
         NAMqc, keep = _qc_nam(NAM.values, batches)
         du['NAM.T'+suffix] = pd.DataFrame(NAMqc, index=NAM.index, columns=NAM.columns[keep]).T
         du['keptcells'+suffix] = keep
-        du['batches'+suffix] = batches
+        du['_batches'+suffix] = batches
 
     def samecovs(A, B):
         if A is None: A = np.zeros(0)
@@ -143,7 +143,7 @@ def nam(data, batches=None, covs=None, nsteps=None, max_frac_pcs=0.15, suffix=''
             return False
     if force_recompute or \
         'NAM_sampleXpc'+suffix not in du or \
-        not samecovs(covs, du['covs'+suffix]):
+        not samecovs(covs, du['_covs'+suffix]):
         print('covariate-adjusted NAM not found; computing and saving')
         NAM = du['NAM.T'+suffix].T
         NAM_resid, M, r = _resid_nam(NAM.values, covs, batches)
@@ -156,6 +156,6 @@ def nam(data, batches=None, covs=None, nsteps=None, max_frac_pcs=0.15, suffix=''
         du['NAM_nbhdXpc'+suffix] = pd.DataFrame(V[:,:npcs],
             index=NAM.columns,
             columns=['PC'+str(i) for i in range(npcs)])
-        du['M'+suffix] = M
-        du['r'+suffix] = r
-        du['covs'+suffix] = (np.zeros(0) if covs is None else covs)
+        du['_M'+suffix] = M
+        du['_r'+suffix] = r
+        du['_covs'+suffix] = (np.zeros(0) if covs is None else covs)
