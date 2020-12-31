@@ -1,2 +1,2 @@
-# mcsc
-Multi-condition single-cell.
+# cna
+Covarying neighborhood analysis.
