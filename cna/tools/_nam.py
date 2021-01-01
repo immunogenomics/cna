@@ -118,6 +118,13 @@ def _svd_nam(NAM):
 
 def nam(data, batches=None, covs=None, nsteps=None, max_frac_pcs=0.15, suffix='',
     force_recompute=False, **kwargs):
+    def safe_same(A, B):
+        if A is None: A = np.zeros(0)
+        if B is None: B = np.zeros(0)
+        if A.shape == B.shape:
+            return np.allclose(A, B)
+        else:
+            return False
 
     # error checking
     covs = _df_to_array(data, covs)
@@ -127,7 +134,7 @@ def nam(data, batches=None, covs=None, nsteps=None, max_frac_pcs=0.15, suffix=''
     npcs = max(10, int(max_frac_pcs * data.N))
     if force_recompute or \
         'NAM.T'+suffix not in du or \
-        not np.allclose(batches, du['_batches'+suffix]):
+        not safe_same(batches, du['_batches'+suffix]):
         print('qcd NAM not found; computing and saving')
         NAM = _nam(data, nsteps=nsteps)
         NAMqc, keep = _qc_nam(NAM.values, batches)
@@ -135,15 +142,9 @@ def nam(data, batches=None, covs=None, nsteps=None, max_frac_pcs=0.15, suffix=''
         du['keptcells'+suffix] = keep
         du['_batches'+suffix] = batches
 
-    def samecovs(A, B):
-        if A is None: A = np.zeros(0)
-        if A.shape == B.shape:
-            return np.allclose(A, B)
-        else:
-            return False
     if force_recompute or \
         'NAM_sampleXpc'+suffix not in du or \
-        not samecovs(covs, du['_covs'+suffix]):
+        not safe_same(covs, du['_covs'+suffix]):
         print('covariate-adjusted NAM not found; computing and saving')
         NAM = du['NAM.T'+suffix].T
         NAM_resid, M, r = _resid_nam(NAM.values, covs, batches)
