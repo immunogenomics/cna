@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import warnings
 import scipy.stats as st
 
 def diffuse_stepwise(data, s, maxnsteps=15):
