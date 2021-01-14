@@ -1,17 +1,26 @@
 import matplotlib.pyplot as plt
-import seaborn as sns
 import numpy as np
 import pandas as pd
 
-def umap(data, ix, c,
+def umap_ncorr(data, res, fdr_thresh='5p', **kwargs):
+    # get colors
+    thresh = res.fdr_5p_t if fdr_thresh == '5p' else res.fdr_10p_t
+    ix1 = np.repeat(False, len(data))
+    ix1[res.kept] = np.abs(res.ncorrs) > thresh
+    c = res.ncorrs[np.abs(res.ncorrs) > thresh]
+
+    umap_overlay(data, ix1, c, **kwargs)
+
+def umap_overlay(data, ix1, c,
     scatter0={},
     scatter1={},
     ax=None, noframe=True, colorbar=True, **cbar_kw):
+
     # set default plotting options
-    scatter0_ = {'alpha':0.01, 's':2, 'color':'grey'}
-    scatter1_ = {'alpha':0.1, 's':4, 'c':c[ix], 'cmap':'seismic',
-                    'vmin':-np.abs(c[ix]).max(),
-                    'vmax':np.abs(c[ix]).max()}
+    scatter0_ = {'alpha':0.1, 's':2, 'color':'grey'}
+    scatter1_ = {'alpha':0.2, 's':8, 'c':c, 'cmap':'seismic',
+                    'vmin':-np.abs(c).max(),
+                    'vmax':np.abs(c).max()}
     scatter0_.update(scatter0)
     scatter1_.update(scatter1)
 
@@ -20,7 +29,7 @@ def umap(data, ix, c,
 
     # do plotting
     ax.scatter(*data.obsm['X_umap'].T, **scatter0_)
-    res = ax.scatter(*data.obsm['X_umap'][ix].T, **scatter1_)
+    res = ax.scatter(*data.obsm['X_umap'][ix1].T, **scatter1_)
 
     # remove ticks and spines
     ax.set_xticks([]); ax.set_yticks([])
@@ -40,22 +49,3 @@ def umap(data, ix, c,
         cbar = None
 
     return ax, cbar
-
-def zhists(z, ts, overlays=[], propsig=None, **kwargs):
-    df = pd.DataFrame(np.concatenate([z[t] for t in ts]), columns=['z'])
-    df['t'] = np.concatenate([[t]*z.shape[1] for t in ts])
-    plt.figure(figsize=(20,10))
-    sns.violinplot(x='t', y='z', data=df, **kwargs)
-    for o in overlays:
-        plt.plot(o[ts], color='k')
-    ax1 = plt.gca()
-    ax2 = None
-
-    if propsig is not None:
-        ax2 = plt.gca().twinx()
-        ax2.plot(propsig[ts], color='blue')
-        ax2.set_ylim(-1.1,1.1)
-        ax2.tick_params(axis='y', labelcolor='blue')
-
-    return ax1, ax2
-

@@ -1,1 +1,1 @@
-from ._umap import umap, zhists
+from ._umap import umap_ncorr, umap_overlay

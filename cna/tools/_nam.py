@@ -50,7 +50,7 @@ def _nam(data, nsteps=None, maxnsteps=15):
 def _qc_nam(NAM, batches):
     N = len(NAM)
     if len(np.unique(batches)) == 1:
-        print('warning: only one unique batch supplied to qc')
+        warnings.warn('only one unique batch supplied to qc')
         keep = np.repeat(True, len(NAM.T))
         return NAM, keep
 
@@ -76,7 +76,7 @@ def _resid_nam(NAM, covs, batches, ridge=None):
         covs = (covs - covs.mean(axis=0))/covs.std(axis=0)
 
     if batches is None or len(np.unique(batches)) == 1:
-        print('warning: only one unique batch supplied to prep')
+        warnings.warn('only one unique batch supplied to prep')
         C = covs
         if len(C.T) == 0:
             M = np.eye(N)

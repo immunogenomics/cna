@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import scipy.stats as st
-import gc
+import gc, warnings
 from argparse import Namespace
 import cna.tools._stats as stats
 from ._nam import nam, _df_to_array
@@ -70,7 +70,7 @@ def _association(NAMsvd, M, r, y, batches, ks=None, Nnull=1000, local_test=True,
     nullminps = np.array([_minp_f(y__)[1] for y__ in y_.T])
     pfinal = ((nullminps <= p+1e-8).sum() + 1)/(Nnull + 1)
     if (nullminps <= p+1e-8).sum() == 0:
-        print('warning: global association p-value attained minimal possible value. '+\
+        warnings.warn('global association p-value attained minimal possible value. '+\
                 'Consider increasing Nnull')
 
     # get neighborhood fdrs if requested
