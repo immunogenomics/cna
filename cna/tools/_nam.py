@@ -117,7 +117,8 @@ def _svd_nam(NAM):
 
     return (U, svs, V)
 
-def nam(data, batches=None, covs=None, nsteps=None, max_frac_pcs=0.15, suffix='',
+def nam(data, batches=None, covs=None, filter_samples=None,
+    nsteps=None, max_frac_pcs=0.15, suffix='',
     force_recompute=False, **kwargs):
     def safe_same(A, B):
         if A is None: A = np.zeros(0)
@@ -130,8 +131,11 @@ def nam(data, batches=None, covs=None, nsteps=None, max_frac_pcs=0.15, suffix=''
     # error checking
     covs = _df_to_array(data, covs)
     batches = _df_to_array(data, batches)
+    filter_samples = \
+        np.repeat(True, len(covs)) if filter_samples is None else _df_to_array(data, filter_samples)
 
     du = data.uns
+    # compute and QC NAM
     npcs = max(10, int(max_frac_pcs * data.N))
     if force_recompute or \
         'NAM.T'+suffix not in du or \
@@ -143,12 +147,19 @@ def nam(data, batches=None, covs=None, nsteps=None, max_frac_pcs=0.15, suffix=''
         du['keptcells'+suffix] = keep
         du['_batches'+suffix] = batches
 
+    # correct for batch/covariates and SVD
     if force_recompute or \
         'NAM_sampleXpc'+suffix not in du or \
-        not safe_same(covs, du['_covs'+suffix]):
+        not safe_same(covs, du['_covs'+suffix]) or \
+        not safe_same(filter_samples, du['_filter_samples'+suffix]):
+
         print('covariate-adjusted NAM not found; computing and saving')
-        NAM = du['NAM.T'+suffix].T
-        NAM_resid, M, r = _resid_nam(NAM.values, covs, batches)
+        du['_filter_samples'+suffix] = filter_samples
+        NAM = du['NAM.T'+suffix].T.iloc[filter_samples]
+        NAM_resid, M, r = _resid_nam(NAM.values,
+                                covs[filter_samples] if covs is not None else covs,
+                                batches[filter_samples] if batches is not None else batches)
+
         print('computing SVD')
         U, svs, V = _svd_nam(NAM_resid)
         du['NAM_sampleXpc'+suffix] = pd.DataFrame(U,

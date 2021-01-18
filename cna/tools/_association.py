@@ -9,18 +9,17 @@ from ._nam import nam, _df_to_array
 def _association(NAMsvd, M, r, y, batches, ks=None, Nnull=1000, local_test=True, seed=None):
     if seed is not None:
         np.random.seed(seed)
+
+    # prep data
+    (U, sv, V) = NAMsvd
+    y = (y - y.mean())/y.std()
     n = len(y)
+
     if ks is None:
         incr = max(int(0.02*n), 1)
         maxnpcs = min(4*incr, int(n/5))
         ks = np.arange(incr, maxnpcs+1, incr)
 
-    # prep data
-    (U, sv, V) = NAMsvd
-    notnan = ~np.isnan(y)
-    y = y[notnan]; batches = batches[notnan]
-    U = U[notnan]; M = M[notnan][:,notnan] #TODO: think a bit more about how to interpret
-    y = (y - y.mean())/y.std()
 
     def _reg(q, k):
         Xpc = U[:,:k]
@@ -54,12 +53,15 @@ def _association(NAMsvd, M, r, y, batches, ks=None, Nnull=1000, local_test=True,
 
     # get non-null f-test p-value
     k, p, ps, = _minp_f(y)
+    if k == max(ks):
+        warnings.warn('data supported use of {} NAM PCs, which is the maximum considered. '+\
+            'Consider allowing more PCs by using the "ks" argument.'.format(k))
 
     # compute coefficients and r2 with chosen model
     ycond = M.dot(y)
     ycond /= ycond.std()
     yhat, beta = _reg(ycond, k)
-    r2_perpc = (beta / np.sqrt(len(ycond)))**2
+    r2_perpc = (beta / np.sqrt(n))**2
     r2 = _r2(ycond, k)
 
     # get neighborhood scores with chosen model
@@ -122,15 +124,22 @@ def association(data, y, batches=None, covs=None, nsteps=None, suffix='',
     batches = _df_to_array(data, batches)
     y = _df_to_array(data, y)
 
+    filter_samples = ~(np.isnan(y) | np.any(np.isnan(covs), axis=1))
+
     du = data.uns
-    nam(data, batches=batches, covs=covs, nsteps=nsteps, suffix=suffix,
+    nam(data, batches=batches, covs=covs, filter_samples=filter_samples,
+                    nsteps=nsteps, suffix=suffix,
                     force_recompute=force_recompute)
     NAMsvd = (
         du['NAM_sampleXpc'+suffix].values,
         du['NAM_svs'+suffix],
         du['NAM_nbhdXpc'+suffix].values
         )
-    res = _association(NAMsvd, du['_M'+suffix], du['_r'+suffix], y, batches, **kwargs)
+
+    print('performing association test')
+    res = _association(NAMsvd, du['_M'+suffix], du['_r'+suffix],
+        y[du['_filter_samples'+suffix]], batches[du['_filter_samples'+suffix]],
+        **kwargs)
 
     # add info about kept cells
     vars(res)['kept'] = du['keptcells'+suffix]
