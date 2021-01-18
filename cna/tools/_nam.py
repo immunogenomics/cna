@@ -131,8 +131,13 @@ def nam(data, batches=None, covs=None, filter_samples=None,
     # error checking
     covs = _df_to_array(data, covs)
     batches = _df_to_array(data, batches)
-    filter_samples = \
-        np.repeat(True, len(covs)) if filter_samples is None else _df_to_array(data, filter_samples)
+    if filter_samples is None:
+        if covs is not None:
+            filter_samples = ~np.any(np.isnan(covs), axis=1)
+        else:
+            filter_samples = np.repeat(True, data.N)
+    else:
+        filter_samples = _df_to_array(data, filter_samples)
 
     du = data.uns
     # compute and QC NAM
