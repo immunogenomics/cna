@@ -34,7 +34,7 @@ def _nam(data, nsteps=None, maxnsteps=15):
     prevmedkurt = np.inf
     for i, s in enumerate(diffuse_stepwise(data, s, maxnsteps=maxnsteps)):
         medkurt = np.median(st.kurtosis(s/C, axis=1))
-        print('\tmedian excess kurtosis:', medkurt)
+        print('\tmedian kurtosis:', medkurt+3)
         if nsteps is None:
             if prevmedkurt - medkurt < 3 and i+1 >= 3:
                 print('stopping after', i+1, 'steps')
@@ -47,6 +47,11 @@ def _nam(data, nsteps=None, maxnsteps=15):
     snorm.index.name = data.samplem.index.name
     return snorm
 
+def _batch_kurtosis(NAM, batches):
+    return st.kurtosis(np.array([
+                NAM[batches == b].mean(axis=0) for b in np.unique(batches)
+                ]), axis=0) + 3
+
 #qcs a NAM to remove neighborhoods that are batchy
 def _qc_nam(NAM, batches):
     N = len(NAM)
@@ -55,14 +60,10 @@ def _qc_nam(NAM, batches):
         keep = np.repeat(True, len(NAM.T))
         return NAM, keep
 
-    B = pd.get_dummies(batches).values
-    B = (B - B.mean(axis=0))/B.std(axis=0)
-
-    batchcorr = B.T.dot(NAM - NAM.mean(axis=0)) / N / NAM.std(axis=0)
-    batchcorr = np.nan_to_num(batchcorr) # if batch is constant then 0 correlation
-    maxbatchcorr2 = np.max(batchcorr**2, axis=0)
-    print('throwing out neighborhoods with maxbatchcorr2 >=', 2*np.median(maxbatchcorr2))
-    keep = (maxbatchcorr2 < 2*np.median(maxbatchcorr2))
+    kurtoses = _batch_kurtosis(NAM, batches)
+    threshold = max(6, 2*np.median(kurtoses))
+    print('throwing out neighborhoods with batch kurtosis >=', threshold)
+    keep = (kurtoses < threshold)
     print('keeping', keep.sum(), 'neighborhoods')
 
     return NAM[:, keep], keep
@@ -99,13 +100,12 @@ def _resid_nam(NAM, covs, batches, ridge=None):
             M = np.eye(N) - C.dot(np.linalg.solve(C.T.dot(C) + ridge*len(C)*L, C.T))
             NAM_ = M.dot(NAM_)
 
-            batchcorr = B.T.dot(NAM_ - NAM_.mean(axis=0)) / len(B) / NAM_.std(axis=0)
-            maxbatchcorr = np.max(batchcorr**2, axis=0)
+            kurtoses = _batch_kurtosis(NAM_, batches)
 
-            print('\twith ridge', ridge, 'median max sq batch correlation =',
-                    np.percentile(maxbatchcorr, 50))
+            print('\twith ridge', ridge, 'median batch kurtosis = ',
+                    np.median(kurtoses))
 
-            if np.percentile(maxbatchcorr, 50) <= 0.025:
+            if np.median(kurtoses) <= 6:
                 break
 
     return NAM_ / NAM_.std(axis=0), M, len(C.T)
@@ -169,11 +169,11 @@ def nam(data, batches=None, covs=None, filter_samples=None,
         U, svs, V = _svd_nam(NAM_resid)
         du['NAM_sampleXpc'+suffix] = pd.DataFrame(U,
             index=NAM.index,
-            columns=['PC'+str(i) for i in range(len(U.T))])
+            columns=['PC'+str(i) for i in range(1, len(U.T)+1)])
         du['NAM_svs'+suffix] = svs
         du['NAM_nbhdXpc'+suffix] = pd.DataFrame(V[:,:npcs],
             index=NAM.columns,
-            columns=['PC'+str(i) for i in range(npcs)])
+            columns=['PC'+str(i) for i in range(1, npcs+1)])
         du['_M'+suffix] = M
         du['_r'+suffix] = r
         du['_covs'+suffix] = (np.zeros(0) if covs is None else covs)
