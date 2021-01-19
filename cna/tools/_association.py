@@ -54,8 +54,8 @@ def _association(NAMsvd, M, r, y, batches, ks=None, Nnull=1000, local_test=True,
     # get non-null f-test p-value
     k, p, ps, = _minp_f(y)
     if k == max(ks):
-        warnings.warn('data supported use of {} NAM PCs, which is the maximum considered. '+\
-            'Consider allowing more PCs by using the "ks" argument.'.format(k))
+        warnings.warn(('data supported use of {} NAM PCs, which is the maximum considered. '+\
+            'Consider allowing more PCs by using the "ks" argument.').format(k))
 
     # compute coefficients and r2 with chosen model
     ycond = M.dot(y)
@@ -119,10 +119,13 @@ def association(data, y, batches=None, covs=None, nsteps=None, suffix='',
 
     # formatting and error checking
     if batches is None:
-        batches = np.ones(len(data.samplem))
+        batches = np.ones(data.N)
     covs = _df_to_array(data, covs)
     batches = _df_to_array(data, batches)
     y = _df_to_array(data, y)
+    if y.shape != (data.N,):
+        raise ValueError(
+            'y should be an array of length data.N; instead its shape is: '+str(y.shape))
 
     filter_samples = ~(np.isnan(y) | np.any(np.isnan(covs), axis=1))
 
