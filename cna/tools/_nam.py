@@ -170,7 +170,8 @@ def nam(data, batches=None, covs=None, filter_samples=None,
         du['NAM_sampleXpc'+suffix] = pd.DataFrame(U,
             index=NAM.index,
             columns=['PC'+str(i) for i in range(1, len(U.T)+1)])
-        du['NAM_svs'+suffix] = svs / len(U) / len(V)
+        du['NAM_svs'+suffix] = svs
+        du['NAM_varexp'+suffix] = svs / len(U) / len(V)
         du['NAM_nbhdXpc'+suffix] = pd.DataFrame(V[:,:npcs],
             index=NAM.columns,
             columns=['PC'+str(i) for i in range(1, npcs+1)])
