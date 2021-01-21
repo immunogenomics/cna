@@ -2,9 +2,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-def umap_ncorr(data, res, fdr_thresh='5p', **kwargs):
-    # get colors
-    thresh = res.fdr_5p_t if fdr_thresh == '5p' else res.fdr_10p_t
+def umap_ncorr(data, res, fdr_thresh=None, **kwargs):
+    if fdr_thresh is None:
+        fdr_thresh = 0.05
+
+    passed = res.fdrs[res.fdrs.fdr <= fdr_thresh]
+    if len(passed) == 0:
+        print('no neighborhoods were significant at FDR <', fdr_thresh)
+        return
+    else:
+        thresh = passed.threshold.iloc[0]
+
     ix1 = np.repeat(False, len(data))
     ix1[res.kept] = np.abs(res.ncorrs) > thresh
     c = res.ncorrs[np.abs(res.ncorrs) > thresh]
