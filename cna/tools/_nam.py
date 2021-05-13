@@ -4,7 +4,7 @@ import warnings
 import scipy.stats as st
 
 def diffuse_stepwise(data, s, maxnsteps=15):
-    a = data.uns['neighbors']['connectivities']
+    a = data.obsp['distances']
     colsums = np.array(a.sum(axis=0)).flatten() + 1
 
     for i in range(maxnsteps):
