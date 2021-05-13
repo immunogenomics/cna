@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "cna"
-version = "0.1.0"
+version = "0.1.1"
 description = "covarying neighborhood analysis"
 authors = ["Yakir Reshef, Laurie Rumker <yreshef@broadinstitute.org>"]
 license = "MIT"

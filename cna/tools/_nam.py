@@ -3,10 +3,15 @@ import warnings
 import numpy as np
 import pandas as pd
 import scipy.stats as st
+import anndata
+from packaging import version
 
 
 def diffuse_stepwise(data, s, maxnsteps=15):
-    a = data.obsp["distances"]
+    if version.parse(anndata.__version__) < version.parse("0.7.2"):
+        a = data.uns["neighbors"]["connectivities"]
+    else:
+        a = data.obsp["distances"]
     colsums = np.array(a.sum(axis=0)).flatten() + 1
 
     for i in range(maxnsteps):
