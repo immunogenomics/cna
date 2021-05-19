@@ -9,7 +9,7 @@ To use `cna`, you can either install it directly from the [Python Package Index]
 or if you'd like to manipulate the source code you can clone this repository and add it to your `PYTHONPATH`.
 
 ## demo
-Take a look at our [tutorial](demo/demo.ipynb) to see how to get started with a small synthetic data set.
+Take a look at our [tutorial](https://nbviewer.jupyter.org/github/yakirr/cna/blob/master/demo/demo.ipynb) to see how to get started with a small synthetic data set.
 
 ## citation
 If you use `cna`, please cite
