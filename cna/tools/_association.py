@@ -6,9 +6,12 @@ from argparse import Namespace
 import cna.tools._stats as stats
 from ._nam import nam, _df_to_array
 
-def _association(NAMsvd, M, r, y, batches, ks=None, Nnull=1000, local_test=True, seed=None):
+def _association(NAMsvd, M, r, y, batches, ks=None, Nnull=1000, force_permute_all=False,
+                    local_test=True, seed=None):
     if seed is not None:
         np.random.seed(seed)
+    if force_permute_all:
+        batches = np.ones(len(y))
 
     # prep data
     (U, sv, V) = NAMsvd
