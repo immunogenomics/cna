@@ -131,6 +131,8 @@ def nam(data, batches=None, covs=None, filter_samples=None,
     # error checking
     covs = _df_to_array(data, covs)
     batches = _df_to_array(data, batches)
+    if batches is None:
+        batches = np.array([1]*data.N)
     if filter_samples is None:
         if covs is not None:
             filter_samples = ~np.any(np.isnan(covs), axis=1)
