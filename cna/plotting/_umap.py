@@ -9,7 +9,7 @@ def umap_ncorr(data, res, fdr_thresh=None, **kwargs):
     passed = res.fdrs[res.fdrs.fdr <= fdr_thresh]
     if len(passed) == 0:
         print('no neighborhoods were significant at FDR <', fdr_thresh)
-        return
+        thresh = np.infty
     else:
         thresh = passed.threshold.iloc[0]
 
@@ -27,8 +27,8 @@ def umap_overlay(data, ix1, c,
     # set default plotting options
     scatter0_ = {'alpha':0.1, 's':2, 'color':'grey'}
     scatter1_ = {'alpha':0.2, 's':8, 'c':c, 'cmap':'seismic',
-                    'vmin':-np.abs(c).max(),
-                    'vmax':np.abs(c).max()}
+                    'vmin':-np.abs(c).max() if len(c) > 0 else 0,
+                    'vmax':np.abs(c).max() if len(c) > 0 else 1}
     scatter0_.update(scatter0)
     scatter1_.update(scatter1)
 
