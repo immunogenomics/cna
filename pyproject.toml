@@ -1,0 +1,35 @@
+[tool.poetry]
+name = "cna"
+version = "0.1.1"
+description = "covarying neighborhood analysis"
+authors = ["Yakir Reshef, Laurie Rumker <yreshef@broadinstitute.org>"]
+license = "GPL-3"
+readme = "README.md"
+repository = "https://github.com/yakirr/cna"
+homepage = "https://github.com/yakirr/cna"
+classifiers=[
+        "Programming Language :: Python :: 3",
+        "License :: OSI Approved :: GPL-3 License",
+        "Operating System :: OS Independent",
+    ]
+include = [ "demo/*.*" ]
+
+[tool.poetry.dependencies]
+python = ">=3.7.1,<3.10"
+numpy = "^1.20.3"
+multianndata = "^0.0.4"
+pandas = "^1.2.4"
+scipy = "^1.6.3"
+argparse = "^1.4.0"
+matplotlib = "^3.4.2"
+scanpy = "^1.7.2"
+
+[tool.poetry.dev-dependencies]
+black = "^21.5b1"
+isort = "^5.8.0"
+mypy = "^0.812"
+flake8 = "^3.9.2"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
