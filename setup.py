@@ -21,7 +21,7 @@ setuptools.setup(
     python_requires='>=3.6',
     install_requires=[
         "multianndata>=0.0.4'",
-        "anndata",
+        "anndata>=0.7.6",
         'numpy>=1.20',
         'pandas>=1.2',
         'scipy>=1.6',
