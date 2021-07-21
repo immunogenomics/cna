@@ -14,4 +14,4 @@ Take a look at our [tutorial](https://nbviewer.jupyter.org/github/yakirr/cna/blo
 ## citation
 If you use `cna`, please cite
 
-[Reshef*, Rumker*, et al., Axes of inter-sample variability among transcriptional neighborhoods reveal disease-associated cell states in single-cell data. BioRxiv, 2021](https://www.biorxiv.org/content/10.1101/2021.04.19.440534v1).
+[\[Reshef, Rumker\], et al., Axes of inter-sample variability among transcriptional neighborhoods reveal disease-associated cell states in single-cell data. BioRxiv, 2021](https://www.biorxiv.org/content/10.1101/2021.04.19.440534v1). \[...\] contributed equally
