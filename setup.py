@@ -5,13 +5,13 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="cna",
-    version="0.0.7",
+    version="0.0.8",
     author="Yakir Reshef, Laurie Rumker",
-    author_email="yreshef@broadinstitute.org",
+    author_email="yreshef@broadinstitute.org, lrumker@broadinstitute.org",
     description="covarying neighborhood analysis",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/yakirr/cna",
+    url="https://github.com/immunogenomics/cna",
     packages=setuptools.find_packages(),
     classifiers=[
         "Programming Language :: Python :: 3",
