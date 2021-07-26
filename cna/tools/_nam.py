@@ -10,7 +10,7 @@ def diffuse_stepwise(data, s, maxnsteps=15):
     av = anndata.__version__
     if type(av) == str:
         av = version.parse(av)
-    if anndata.__version__ < version.parse("0.7.2"):
+    if av < version.parse("0.7.2"):
         a = data.uns["neighbors"]["connectivities"]
     else:
         a = data.obsp["distances"]
