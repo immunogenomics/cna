@@ -6,12 +6,19 @@ import anndata
 from packaging import version
 
 def diffuse_stepwise(data, s, maxnsteps=15):
+    # find connectivity matrix
+    av = anndata.__version__
+    if type(av) == str:
+        av = version.parse(av)
     if anndata.__version__ < version.parse("0.7.2"):
         a = data.uns["neighbors"]["connectivities"]
     else:
         a = data.obsp["distances"]
+
+    # normalize
     colsums = np.array(a.sum(axis=0)).flatten() + 1
 
+    # do diffusion
     for i in range(maxnsteps):
         print('\ttaking step', i+1)
         s = a.dot(s/colsums[:,None]) + s/colsums[:,None]
