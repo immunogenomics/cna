@@ -2,11 +2,23 @@ import numpy as np
 import pandas as pd
 import warnings
 import scipy.stats as st
+import anndata
+from packaging import version
 
 def diffuse_stepwise(data, s, maxnsteps=15):
-    a = data.uns['neighbors']['connectivities']
+    # find connectivity matrix
+    av = anndata.__version__
+    if type(av) == str:
+        av = version.parse(av)
+    if av < version.parse("0.7.2"):
+        a = data.uns["neighbors"]["connectivities"]
+    else:
+        a = data.obsp["distances"]
+
+    # normalize
     colsums = np.array(a.sum(axis=0)).flatten() + 1
 
+    # do diffusion
     for i in range(maxnsteps):
         print('\ttaking step', i+1)
         s = a.dot(s/colsums[:,None]) + s/colsums[:,None]
@@ -136,6 +148,8 @@ def nam(data, batches=None, covs=None, filter_samples=None,
     # error checking
     covs = _df_to_array(data, covs)
     batches = _df_to_array(data, batches)
+    if batches is None:
+        batches = np.array([1]*data.N)
     if filter_samples is None:
         if covs is not None:
             filter_samples = ~np.any(np.isnan(covs), axis=1)
