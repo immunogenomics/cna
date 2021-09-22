@@ -30,6 +30,11 @@ def _df_to_array(data, x):
 def _nam(data, nsteps=None, maxnsteps=15):
     s = pd.get_dummies(data.obs_sampleids)[data.samplem.index.values]
     C = s.sum(axis=0)
+    
+    # Add pseudocounts
+    epsilon = (np.max(C)/np.mean(C))*(3/2)*(1/s.shape[0])
+    print('Pseudocount epsilon '+str(epsilon))
+    s = s + np.ones(s.shape)*epsilon
 
     prevmedkurt = np.inf
     for i, s in enumerate(diffuse_stepwise(data, s, maxnsteps=maxnsteps)):
@@ -42,7 +47,7 @@ def _nam(data, nsteps=None, maxnsteps=15):
             prevmedkurt = medkurt
         elif i+1 == nsteps:
             break
-
+    
     snorm = (s / C).T
     snorm.index.name = data.samplem.index.name
     return snorm
