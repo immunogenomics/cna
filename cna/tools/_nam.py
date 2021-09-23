@@ -44,9 +44,9 @@ def _nam(data, nsteps=None, maxnsteps=15):
     C = s.sum(axis=0)
     
     # Add pseudocounts
-    epsilon = (np.max(C)/np.mean(C))*(3/2)*(1/s.shape[0])
-    print('Pseudocount epsilon '+str(epsilon))
-    s = s + np.ones(s.shape)*epsilon
+    #epsilon = (np.max(C)/np.mean(C))*(3/2)*(1/s.shape[0])
+    #print('Pseudocount epsilon '+str(epsilon))
+    #s = s + np.ones(s.shape)*epsilon
 
     prevmedkurt = np.inf
     for i, s in enumerate(diffuse_stepwise(data, s, maxnsteps=maxnsteps)):
@@ -134,6 +134,22 @@ def _svd_nam(NAM):
 
     return (U, svs, V)
 
+def scale_nbhd_variances(NAM_norm, sampleids):
+    # abundances across samples per nbhd already mean-centered and standardized 
+    # now scaled to variance = 1/[total cells in sample from which anchor cell came]
+    for samplename in np.unique(sampleids):
+        i_samplecells = np.where(sampleids==samplename)[0]
+        NAM_norm[:,i_samplecells] = NAM_norm[:,i_samplecells] / np.repeat(len(i_samplecells)**(1/2), len(i_samplecells))
+    #sum_var_per_sample = []
+    #for i_sample in np.unique(sampleids):
+    #    i_samplecells = np.where(sampleids==i_sample)[0]
+    #    sum_var_per_sample.append(NAM_norm[:, i_samplecells].var(axis=0).sum())
+    #print("variances scaled per neighborhood")                                                                                               
+    #print(NAM_norm.var(axis=0))                                                                                                                  
+    #print(sum_var_per_sample)                                                                                                                     
+    return(NAM_norm)
+
+
 def nam(data, batches=None, covs=None, filter_samples=None,
     nsteps=None, max_frac_pcs=0.15, suffix='',
     force_recompute=False, **kwargs):
@@ -183,6 +199,7 @@ def nam(data, batches=None, covs=None, filter_samples=None,
         NAM_resid, M, r = _resid_nam(NAM.values,
                                 covs[filter_samples] if covs is not None else covs,
                                 batches[filter_samples] if batches is not None else batches)
+        NAM_resid = scale_nbhd_variances(NAM_resid, data.obs_sampleids[data.uns['keptcells']])
 
         print('computing SVD')
         U, svs, V = _svd_nam(NAM_resid)
