@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="cna",
-    version="0.0.8",
+    version="0.0.9",
     author="Yakir Reshef, Laurie Rumker",
     author_email="yreshef@broadinstitute.org, lrumker@broadinstitute.org",
     description="covarying neighborhood analysis",
