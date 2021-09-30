@@ -20,8 +20,8 @@ setuptools.setup(
     ],
     python_requires='>=3.6',
     install_requires=[
-        "multianndata>=0.0.4'",
-        "anndata>=0.7.1",
+        'multianndata>=0.0.4',
+        'anndata>=0.7.1',
         'numpy>=1.18.1',
         'pandas>=1.0.3',
         'scipy>=1.4.1',
