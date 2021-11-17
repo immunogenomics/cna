@@ -136,7 +136,7 @@ def association(data, y, batches=None, covs=None, nsteps=None, suffix='',
     du = data.uns
     nam(data, batches=batches, covs=covs, filter_samples=filter_samples,
                     nsteps=nsteps, suffix=suffix,
-                    force_recompute=force_recompute)
+                    force_recompute=force_recompute, **kwargs)
     NAMsvd = (
         du['NAM_sampleXpc'+suffix].values,
         du['NAM_svs'+suffix],

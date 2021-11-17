@@ -130,7 +130,7 @@ def _svd_nam(NAM):
     return (U, svs, V)
 
 def nam(data, batches=None, covs=None, filter_samples=None,
-    nsteps=None, max_frac_pcs=0.15, suffix='',
+    nsteps=None, max_frac_pcs=0.15, suffix='', ks = None,
     force_recompute=False, **kwargs):
     def safe_same(A, B):
         if A is None: A = np.zeros(0)
@@ -155,7 +155,6 @@ def nam(data, batches=None, covs=None, filter_samples=None,
 
     du = data.uns
     # compute and QC NAM
-    npcs = max(10, int(max_frac_pcs * data.N))
     if force_recompute or \
         'NAM.T'+suffix not in du or \
         not safe_same(batches, du['_batches'+suffix]):
@@ -181,6 +180,7 @@ def nam(data, batches=None, covs=None, filter_samples=None,
 
         print('computing SVD')
         U, svs, V = _svd_nam(NAM_resid)
+        npcs = min(V.shape[1], max([10]+[int(max_frac_pcs * data.N)]+[ks if ks is not None else []][0]))
         du['NAM_sampleXpc'+suffix] = pd.DataFrame(U,
             index=NAM.index,
             columns=['PC'+str(i) for i in range(1, len(U.T)+1)])
