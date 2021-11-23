@@ -3,7 +3,7 @@ import pandas as pd
 import scipy.stats as st
 import gc, warnings
 from argparse import Namespace
-import cna.tools._stats as stats
+from ._stats import conditional_permutation, empirical_fdrs
 from ._nam import nam, _df_to_array
 
 def _association(NAMsvd, M, r, y, batches, ks=None, Nnull=1000, force_permute_all=False,
@@ -67,7 +67,7 @@ def _association(NAMsvd, M, r, y, batches, ks=None, Nnull=1000, force_permute_al
     ncorrs = (np.sqrt(sv[:k])*beta/n).dot(V[:,:k].T)
 
     # compute final p-value using Nnull null f-test p-values
-    y_ = stats.conditional_permutation(batches, y, Nnull)
+    y_ = conditional_permutation(batches, y, Nnull)
     nullminps, nullr2s = np.array([_minp_stats(y__)[1:] for y__ in y_.T]).T
     pfinal = ((nullminps <= p+1e-8).sum() + 1)/(Nnull + 1)
     if (nullminps <= p+1e-8).sum() == 0:
@@ -87,7 +87,7 @@ def _association(NAMsvd, M, r, y, batches, ks=None, Nnull=1000, force_permute_al
 
         maxcorr = np.abs(ncorrs).max()
         fdr_thresholds = np.arange(maxcorr/4, maxcorr, maxcorr/400)
-        fdr_vals = stats.empirical_fdrs(ncorrs, nullncorrs, fdr_thresholds)
+        fdr_vals = empirical_fdrs(ncorrs, nullncorrs, fdr_thresholds)
 
         fdrs = pd.DataFrame({
             'threshold':fdr_thresholds,
