@@ -40,13 +40,21 @@ def _df_to_array(data, x):
 
 # creates a neighborhood abundance matrix
 def _nam(data, nsteps=None, maxnsteps=15):
-    s = pd.get_dummies(data.obs_sampleids)[data.samplem.index.values]
-    C = s.sum(axis=0)
+    def R(A, B):
+        return ((A - A.mean(axis=0))*(B - B.mean(axis=0))).mean(axis=0) \
+            / A.std(axis=0) / B.std(axis=0)
+
+    S = pd.get_dummies(data.obs_sampleids)[data.samplem.index.values]
+    C = S.sum(axis=0)
 
     prevmedkurt = np.inf
-    for i, s in enumerate(diffuse_stepwise(data, s, maxnsteps=maxnsteps)):
+    old_s = np.zeros(S.shape)
+    for i, s in enumerate(diffuse_stepwise(data, S, maxnsteps=maxnsteps)):
         medkurt = np.median(st.kurtosis(s/C, axis=1))
+        R2 = R(s, old_s)**2
+        old_s = s
         print('\tmedian kurtosis:', medkurt+3)
+        print('\t20th percentile R2(t,t-1):', np.percentile(R2, 20))
         if nsteps is None:
             if prevmedkurt - medkurt < 3 and i+1 >= 3:
                 print('stopping after', i+1, 'steps')
