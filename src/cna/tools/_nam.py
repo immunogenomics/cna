@@ -13,7 +13,7 @@ def diffuse_stepwise(data, s, maxnsteps=15):
     if av < version.parse("0.7.2"):
         a = data.uns["neighbors"]["connectivities"]
     else:
-        a = data.obsp["distances"]
+        a = data.obsp["connectivities"]
 
     # normalize
     colsums = np.array(a.sum(axis=0)).flatten() + 1
