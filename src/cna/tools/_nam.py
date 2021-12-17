@@ -3,6 +3,7 @@ import pandas as pd
 import warnings
 import scipy.stats as st
 import anndata
+import gc
 from packaging import version
 
 def diffuse_stepwise(data, s, maxnsteps=15):
@@ -62,6 +63,7 @@ def _nam(data, nsteps=None, maxnsteps=15):
             prevmedkurt = medkurt
         elif i+1 == nsteps:
             break
+        gc.collect()
 
     snorm = (s / C).T
     snorm.index.name = data.samplem.index.name
