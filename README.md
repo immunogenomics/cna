@@ -15,6 +15,9 @@ or if you'd like to manipulate the source code you can clone this repository and
 ## demo
 Take a look at our [tutorial](https://nbviewer.jupyter.org/github/yakirr/cna/blob/master/demo/demo.ipynb) to see how to get started with a small synthetic data set.
 
+## talk
+You can learn more about `cna` by watching our [talk](https://youtu.be/FlFYa79D4dc?t=2405) at the Broad Institute's Models, Inference, and Algorithms seminar, which is preceded by a [primer](https://youtu.be/FlFYa79D4dc) by Dylan Kotliar on nearest-neighbor graphs.
+
 ## notices
 * January 20, 2022:  It has come to our attention that a bug introduced on July 16, 2021 caused `cna` to behave incorrectly for users with `anndata` version 0.7.2 or later, possibly resulting in false positive or false negative results. This bug was fixed in `cna` version 0.1.4. We strongly recommend that any users with `anndata` version 0.7.2 or later either re-clone CNA or run `pip install --upgrade cna` and re-run all analyses that may have been affected.
 
