@@ -146,7 +146,7 @@ def nam(data, batches=None, covs=None, filter_samples=None,
         if A is None: A = np.zeros(0)
         if B is None: B = np.zeros(0)
         if A.shape == B.shape:
-            return np.allclose(A, B)
+            return np.allclose(A, B, equal_nan = True)
         else:
             return False
 
