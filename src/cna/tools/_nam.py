@@ -189,6 +189,7 @@ def nam(data, batches=None, covs=None, filter_samples=None,
                                 batches[filter_samples] if batches is not None else batches)
 
         print('computing SVD')
+        du['NAM_resid.T'+suffix] = NAM_resid.T
         U, svs, V = _svd_nam(NAM_resid)
         npcs = min(V.shape[1], max([10]+[int(max_frac_pcs * data.N)]+[ks if ks is not None else []][0]))
         du['NAM_sampleXpc'+suffix] = pd.DataFrame(U,
