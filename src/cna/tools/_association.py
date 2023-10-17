@@ -6,7 +6,7 @@ from argparse import Namespace
 from ._stats import conditional_permutation, empirical_fdrs
 from ._nam import nam, _df_to_array
 
-def _association(NAMsvd, M, r, y, batches, ks=None, Nnull=1000, force_permute_all=False,
+def _association(NAMsvd, NAMresid, M, r, y, batches, ks=None, Nnull=1000, force_permute_all=False,
                     local_test=True, seed=None):
     if seed is not None:
         np.random.seed(seed)
@@ -61,10 +61,11 @@ def _association(NAMsvd, M, r, y, batches, ks=None, Nnull=1000, force_permute_al
     ycond = M.dot(y)
     ycond /= ycond.std()
     yhat, beta = _reg(ycond, k)
+    _, fullbeta = _reg(ycond, n)
     r2_perpc = (beta / np.sqrt(ycond.dot(ycond)))**2
 
-    # get neighborhood scores with chosen model
-    ncorrs = (np.sqrt(sv[:k])*beta/n).dot(V[:,:k].T)
+    # get neighborhood coefficients
+    ncorrs = (y[:,None]*NAMresid).mean(axis=0)
 
     # compute final p-value using Nnull null f-test p-values
     y_ = conditional_permutation(batches, y, Nnull)
@@ -83,7 +84,7 @@ def _association(NAMsvd, M, r, y, batches, ks=None, Nnull=1000, force_permute_al
         ycond_ = M.dot(y_)
         ycond_ /= ycond_.std(axis=0)
         gamma_ = U[:,:k].T.dot(ycond_)
-        nullncorrs = np.abs(V[:,:k].dot(np.sqrt(sv[:k])[:,None]*(gamma_ / n)))
+        nullncorrs = np.abs(NAMresid.T.dot(ycond_) / n)
 
         maxcorr = np.abs(ncorrs).max()
         fdr_thresholds = np.arange(maxcorr/4, maxcorr, maxcorr/400)
@@ -144,7 +145,7 @@ def association(data, y, batches=None, covs=None, nsteps=None, suffix='',
         )
 
     print('performing association test')
-    res = _association(NAMsvd, du['_M'+suffix], du['_r'+suffix],
+    res = _association(NAMsvd, du['NAM_resid.T'+suffix].T, du['_M'+suffix], du['_r'+suffix],
         y[du['_filter_samples'+suffix]], batches[du['_filter_samples'+suffix]],
         **kwargs)
 
