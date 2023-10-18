@@ -5,28 +5,35 @@ import scipy.stats as st
 import anndata
 import gc
 from packaging import version
+from ._out import select_output
 
-def diffuse_stepwise(data, s, maxnsteps=15):
-    # find connectivity matrix
+def get_connectivity(data):
     av = anndata.__version__
     if type(av) == str:
         av = version.parse(av)
     if av < version.parse("0.7.2"):
-        a = data.uns["neighbors"]["connectivities"]
+        return data.uns["neighbors"]["connectivities"]
     else:
-        a = data.obsp["connectivities"]
+        return data.obsp["connectivities"]
+        
+def diffuse_stepwise(data, s, maxnsteps=15, show_progress=False):
+    out = select_output(show_progress)
+    
+    # find connectivity matrix
+    a = get_connectivity(data)
 
     # normalize
     colsums = np.array(a.sum(axis=0)).flatten() + 1
 
     # do diffusion
     for i in range(maxnsteps):
-        print('\ttaking step', i+1)
+        print('\ttaking step', i+1, file=out)
         s = a.dot(s/colsums[:,None]) + s/colsums[:,None]
         yield s
 
-def diffuse(data, s, nsteps):
-    for s in diffuse_stepwise(data, s, maxnsteps=nsteps):
+def diffuse(data, s, nsteps, show_progress=False):
+    for s in diffuse_stepwise(data, s, maxnsteps=nsteps,
+                              show_progress=show_progress):
         pass
     return s
 
@@ -40,7 +47,9 @@ def _df_to_array(data, x):
         return x
 
 # creates a neighborhood abundance matrix
-def _nam(data, nsteps=None, maxnsteps=15):
+def _nam(data, nsteps=None, maxnsteps=15, show_progress=False):
+    out = select_output(show_progress)
+    
     def R(A, B):
         return ((A - A.mean(axis=0))*(B - B.mean(axis=0))).mean(axis=0) \
             / A.std(axis=0) / B.std(axis=0)
@@ -54,11 +63,11 @@ def _nam(data, nsteps=None, maxnsteps=15):
         medkurt = np.median(st.kurtosis(s/C, axis=1))
         R2 = R(s, old_s)**2
         old_s = s
-        print('\tmedian kurtosis:', medkurt+3)
-        print('\t20th percentile R2(t,t-1):', np.percentile(R2, 20))
+        print('\tmedian kurtosis:', medkurt+3, file=out)
+        print('\t20th percentile R2(t,t-1):', np.percentile(R2, 20), file=out)
         if nsteps is None:
             if prevmedkurt - medkurt < 3 and i+1 >= 3:
-                print('stopping after', i+1, 'steps')
+                print('stopping after', i+1, 'steps', file=out)
                 break
             prevmedkurt = medkurt
         elif i+1 == nsteps:
@@ -75,23 +84,26 @@ def _batch_kurtosis(NAM, batches):
                 ]), axis=0) + 3
 
 #qcs a NAM to remove neighborhoods that are batchy
-def _qc_nam(NAM, batches):
+def _qc_nam(NAM, batches, show_progress=False):
+    out = select_output(show_progress)
+    
     N = len(NAM)
     if len(np.unique(batches)) == 1:
-        warnings.warn('only one unique batch supplied to qc')
         keep = np.repeat(True, len(NAM.T))
         return NAM, keep
 
     kurtoses = _batch_kurtosis(NAM, batches)
     threshold = max(6, 2*np.median(kurtoses))
-    print('throwing out neighborhoods with batch kurtosis >=', threshold)
+    print('throwing out neighborhoods with batch kurtosis >=', threshold, file=out)
     keep = (kurtoses < threshold)
-    print('keeping', keep.sum(), 'neighborhoods')
+    print('keeping', keep.sum(), 'neighborhoods', file=out)
 
     return NAM[:, keep], keep
 
 # residualizes covariates and batch information out of NAM
-def _resid_nam(NAM, covs, batches, ridge=None):
+def _resid_nam(NAM, covs, batches, ridge=None, show_progress=False):
+    out = select_output(show_progress)
+    
     N = len(NAM)
     NAM_ = NAM - NAM.mean(axis=0)
     if covs is None:
@@ -100,7 +112,6 @@ def _resid_nam(NAM, covs, batches, ridge=None):
         covs = (covs - covs.mean(axis=0))/covs.std(axis=0)
 
     if batches is None or len(np.unique(batches)) == 1:
-        warnings.warn('only one unique batch supplied to prep')
         C = covs
         if len(C.T) == 0:
             M = np.eye(N)
@@ -125,7 +136,7 @@ def _resid_nam(NAM, covs, batches, ridge=None):
             kurtoses = _batch_kurtosis(NAM_, batches)
 
             print('\twith ridge', ridge, 'median batch kurtosis = ',
-                    np.median(kurtoses))
+                    np.median(kurtoses), file=out)
 
             if np.median(kurtoses) <= 6:
                 break
@@ -141,7 +152,9 @@ def _svd_nam(NAM):
 
 def nam(data, batches=None, covs=None, filter_samples=None,
     nsteps=None, max_frac_pcs=0.15, suffix='', ks = None,
-    force_recompute=False, **kwargs):
+    force_recompute=False, show_progress=False, **kwargs):
+    out = select_output(show_progress)
+    
     def safe_same(A, B):
         if A is None: A = np.zeros(0)
         if B is None: B = np.zeros(0)
@@ -149,7 +162,7 @@ def nam(data, batches=None, covs=None, filter_samples=None,
             return np.allclose(A, B, equal_nan = True)
         else:
             return False
-
+    
     # error checking
     covs = _df_to_array(data, covs)
     batches = _df_to_array(data, batches)
@@ -168,9 +181,9 @@ def nam(data, batches=None, covs=None, filter_samples=None,
     if force_recompute or \
         'NAM.T'+suffix not in du or \
         not safe_same(batches, du['_batches'+suffix]):
-        print('qcd NAM not found; computing and saving')
-        NAM = _nam(data, nsteps=nsteps)
-        NAMqc, keep = _qc_nam(NAM.values, batches)
+        print('qcd NAM not found; computing and saving', file=out)
+        NAM = _nam(data, nsteps=nsteps, show_progress=show_progress)
+        NAMqc, keep = _qc_nam(NAM.values, batches, show_progress=show_progress)
         du['NAM.T'+suffix] = pd.DataFrame(NAMqc, index=NAM.index, columns=NAM.columns[keep]).T
         du['keptcells'+suffix] = keep
         du['_batches'+suffix] = batches
@@ -181,14 +194,15 @@ def nam(data, batches=None, covs=None, filter_samples=None,
         not safe_same(covs, du['_covs'+suffix]) or \
         not safe_same(filter_samples, du['_filter_samples'+suffix]):
 
-        print('covariate-adjusted NAM not found; computing and saving')
+        print('covariate-adjusted NAM not found; computing and saving', file=out)
         du['_filter_samples'+suffix] = filter_samples
         NAM = du['NAM.T'+suffix].T.iloc[filter_samples]
         NAM_resid, M, r = _resid_nam(NAM.values,
                                 covs[filter_samples] if covs is not None else covs,
-                                batches[filter_samples] if batches is not None else batches)
+                                batches[filter_samples] if batches is not None else batches,
+                                show_progress=show_progress)
 
-        print('computing SVD')
+        print('computing SVD', file=out)
         du['NAM_resid.T'+suffix] = NAM_resid.T
         U, svs, V = _svd_nam(NAM_resid)
         npcs = min(V.shape[1], max([10]+[int(max_frac_pcs * data.N)]+[ks if ks is not None else []][0]))
