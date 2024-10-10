@@ -24,7 +24,7 @@ def _association(NAMsvd, NAMresid, M, r, y, batches, ks=None, Nnull=1000, force_
 
     if ks is None:
         incr = max(int(0.02*n), 1)
-        maxnpcs = min(4*incr, int(n/5))
+        maxnpcs = min(4*incr, max(int(n/5),1))
         ks = np.arange(incr, maxnpcs+1, incr)
 
     def _reg(q, k):
