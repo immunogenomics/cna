@@ -16,24 +16,25 @@ def get_connectivity(data):
     else:
         return data.obsp["connectivities"]
         
-def diffuse_stepwise(data, s, maxnsteps=15, show_progress=False):
+def diffuse_stepwise(data, s, maxnsteps=15, show_progress=False, self_weight=1):
     out = select_output(show_progress)
     
     # find connectivity matrix
     a = get_connectivity(data)
 
     # normalize
-    colsums = np.array(a.sum(axis=0)).flatten() + 1
+    colsums = np.array(a.sum(axis=0)).flatten() + self_weight
 
     # do diffusion
     for i in range(maxnsteps):
         print('\ttaking step', i+1, file=out)
-        s = a.dot(s/colsums[:,None]) + s/colsums[:,None]
+        s = a.dot(s/colsums[:,None]) + self_weight*s/colsums[:,None]
         yield s
 
-def diffuse(data, s, nsteps, show_progress=False):
+def diffuse(data, s, nsteps, show_progress=False, self_weight=1):
     for s in diffuse_stepwise(data, s, maxnsteps=nsteps,
-                              show_progress=show_progress):
+                              show_progress=show_progress,
+                              self_weight=self_weight):
         pass
     return s
 
@@ -47,7 +48,7 @@ def _df_to_array(data, x):
         return x
 
 # creates a neighborhood abundance matrix
-def _nam(data, nsteps=None, maxnsteps=15, show_progress=False):
+def _nam(data, nsteps=None, maxnsteps=15, self_weight=1, show_progress=False):
     out = select_output(show_progress)
     
     def R(A, B):
@@ -59,7 +60,7 @@ def _nam(data, nsteps=None, maxnsteps=15, show_progress=False):
 
     prevmedkurt = np.inf
     old_s = np.zeros(S.shape)
-    for i, s in enumerate(diffuse_stepwise(data, S, maxnsteps=maxnsteps)):
+    for i, s in enumerate(diffuse_stepwise(data, S, self_weight=self_weight, maxnsteps=maxnsteps)):
         medkurt = np.median(st.kurtosis(s/C, axis=1))
         R2 = R(s, old_s)**2
         old_s = s
@@ -151,10 +152,10 @@ def _svd_nam(NAM):
     return (U, svs, V)
 
 def nam(data, batches=None, covs=None, filter_samples=None,
-    nsteps=None, max_frac_pcs=0.15, suffix='', ks = None,
+    nsteps=None, self_weight=1, max_frac_pcs=0.15, suffix='', ks = None,
     force_recompute=False, show_progress=False, **kwargs):
     out = select_output(show_progress)
-    
+
     def safe_same(A, B):
         if A is None: A = np.zeros(0)
         if B is None: B = np.zeros(0)
@@ -182,7 +183,7 @@ def nam(data, batches=None, covs=None, filter_samples=None,
         'NAM.T'+suffix not in du or \
         not safe_same(batches, du['_batches'+suffix]):
         print('qcd NAM not found; computing and saving', file=out)
-        NAM = _nam(data, nsteps=nsteps, show_progress=show_progress)
+        NAM = _nam(data, nsteps=nsteps, self_weight=self_weight, show_progress=show_progress)
         NAMqc, keep = _qc_nam(NAM.values, batches, show_progress=show_progress)
         du['NAM.T'+suffix] = pd.DataFrame(NAMqc, index=NAM.index, columns=NAM.columns[keep]).T
         du['keptcells'+suffix] = keep

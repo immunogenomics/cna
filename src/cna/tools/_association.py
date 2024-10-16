@@ -3,11 +3,11 @@ import pandas as pd
 import scipy.stats as st
 import gc, warnings
 from argparse import Namespace
-from ._stats import conditional_permutation, empirical_fdrs
+from ._stats import conditional_permutation, grouplevel_permutation, empirical_fdrs
 from ._nam import nam, _df_to_array
 from ._out import select_output
 
-def _association(NAMsvd, NAMresid, M, r, y, batches, ks=None, Nnull=1000, force_permute_all=False,
+def _association(NAMsvd, NAMresid, M, r, y, batches, donorids, ks=None, Nnull=1000, force_permute_all=False,
                     local_test=True, seed=None, show_progress=False):
     # output level
     out = select_output(show_progress)
@@ -24,7 +24,7 @@ def _association(NAMsvd, NAMresid, M, r, y, batches, ks=None, Nnull=1000, force_
 
     if ks is None:
         incr = max(int(0.02*n), 1)
-        maxnpcs = min(4*incr, max(int(n/5),1))
+        maxnpcs = min(4*incr, int(n/5))
         ks = np.arange(incr, maxnpcs+1, incr)
 
     def _reg(q, k):
@@ -72,7 +72,10 @@ def _association(NAMsvd, NAMresid, M, r, y, batches, ks=None, Nnull=1000, force_
     ncorrs = (y[:,None]*NAMresid).mean(axis=0)
 
     # compute final p-value using Nnull null f-test p-values
-    y_ = conditional_permutation(batches, y, Nnull)
+    if donorids is not None:
+        y_ = grouplevel_permutation(donorids, y, Nnull)
+    else:
+        y_ = conditional_permutation(batches, y, Nnull)
     nullminps, nullr2s = np.array([_minp_stats(y__)[1:] for y__ in y_.T]).T
     pfinal = ((nullminps <= p+1e-8).sum() + 1)/(Nnull + 1)
     if (nullminps <= p+1e-8).sum() == 0:
@@ -120,12 +123,16 @@ def _association(NAMsvd, NAMresid, M, r, y, batches, ks=None, Nnull=1000, force_
             'nullr2_mean':nullr2s.mean(), 'nullr2_std':nullr2s.std()}
     return Namespace(**res)
 
-def association(data, y, batches=None, covs=None, nsteps=None, suffix='',
+def association(data, y, batches=None, covs=None, donorids=None, nsteps=None, suffix='',
     force_recompute=False, show_progress=False, allow_low_sample_size=False, **kwargs):
     # output level
     out = select_output(show_progress)
     
     # formatting and error checking
+    if batches is not None and donorids is not None:
+        raise ValueError('CNA does not currently support conditioning on batch '+\
+            'while also accounting for multiple samples per donor')
+
     if batches is None:
         batches = np.ones(data.N)
     covs = _df_to_array(data, covs)
@@ -145,6 +152,11 @@ def association(data, y, batches=None, covs=None, nsteps=None, suffix='',
 
     if covs is not None:
         filter_samples = ~(np.isnan(y) | np.any(np.isnan(covs), axis=1))
+        if donorids is not None:
+            print('WARNING: CNA currently does not account for multiple samples per donor '+\
+                'when conditioning on covariates. This conditioning may therefore account '+\
+                'only incompletely for the covariates of interest. We expect this to make '+\
+                'only minor differences in most cases, but we have not investigated it formally')
     else:
         filter_samples = ~np.isnan(y)
 
@@ -161,7 +173,7 @@ def association(data, y, batches=None, covs=None, nsteps=None, suffix='',
 
     print('performing association test', file=out)
     res = _association(NAMsvd, du['NAM_resid.T'+suffix].T, du['_M'+suffix], du['_r'+suffix],
-        y[du['_filter_samples'+suffix]], batches[du['_filter_samples'+suffix]],
+        y[du['_filter_samples'+suffix]], batches[du['_filter_samples'+suffix]], donorids,
         show_progress=show_progress,
         **kwargs)
 

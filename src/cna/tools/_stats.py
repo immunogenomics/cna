@@ -17,6 +17,20 @@ def conditional_permutation(B, Y, num):
     result = Y[bix]
     return Y[bix]
 
+def grouplevel_permutation(G, Y, num):
+    """
+    Permutes Y such that elements with the same value of G will
+        have identical values of Y in each permutation
+    """
+    Gu = np.unique(G)
+    Yg = np.array([Y[G==g][0] for g in Gu])
+    Gind = np.array([np.where(Gu == g)[0][0] for g in G])
+    if (Yg[Gind] != Y).any():
+        print('ERROR: the value of Y is not identical within each group of samples')
+        return
+    ix = np.argsort(np.random.randn(len(Yg), num), axis=0)
+    return Yg[ix][Gind]
+
 def tail_counts(z, znull, atol=1e-8, rtol=1e-5):
     """
     Computes the number of null z-scores of equal or greater magnitude than each supplied
