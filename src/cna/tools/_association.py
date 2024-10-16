@@ -93,7 +93,7 @@ def _association(NAMsvd, NAMresid, M, r, y, batches, donorids, ks=None, Nnull=10
         gamma_ = U[:,:k].T.dot(ycond_)
         nullncorrs = np.abs(NAMresid.T.dot(ycond_) / n)
 
-        maxcorr = np.abs(ncorrs).max()
+        maxcorr = max(np.abs(ncorrs).max(), 0.001)
         fdr_thresholds = np.arange(maxcorr/4, maxcorr, maxcorr/400)
         fdr_vals = empirical_fdrs(ncorrs, nullncorrs, fdr_thresholds)
 
