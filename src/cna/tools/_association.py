@@ -173,7 +173,7 @@ def association(data, y, batches=None, covs=None, donorids=None, nsteps=None, su
 
     print('performing association test', file=out)
     res = _association(NAMsvd, du['NAM_resid.T'+suffix].T, du['_M'+suffix], du['_r'+suffix],
-        y[du['_filter_samples'+suffix]], batches[du['_filter_samples'+suffix]], donorids,
+        y[du['_filter_samples'+suffix]], batches[du['_filter_samples'+suffix]], donorids[du['_filter_samples'+suffix]],
         show_progress=show_progress,
         **kwargs)
 
