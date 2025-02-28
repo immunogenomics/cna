@@ -26,6 +26,11 @@ def _association(NAMsvd, NAMresid, M, r, y, batches, donorids, ks=None, Nnull=10
         incr = max(int(0.02*n), 1)
         maxnpcs = min(4*incr, int(n/5))
         ks = np.arange(incr, maxnpcs+1, incr)
+    if max(ks) + r >= n:
+        raise ValueError(
+                    'Maximum number of PCs plus number of covariates must be less than n-1. '+\
+                    f'Currently it is {max(ks)+r} while n is {n}. Either reduce the number of covariates '+\
+                    'or reduce the number of PCs to consider using the optional argument ks=[...].')
 
     def _reg(q, k):
         Xpc = U[:,:k]
@@ -52,7 +57,7 @@ def _association(NAMsvd, NAMresid, M, r, y, batches, donorids, ks=None, Nnull=10
                 k)
             for k in ks
         ]).T
-        k_ = np.argmin(ps)
+        k_ = np.nanargmin(ps)
         return ks[k_], ps[k_], r2s[k_]
 
     # get non-null f-test p-value
