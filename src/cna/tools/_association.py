@@ -129,7 +129,8 @@ def _association(NAMsvd, NAMresid, M, r, y, batches, donorids, ks=None, Nnull=10
     return Namespace(**res)
 
 def association(data, y, sid_name, batches=None, covs=None, donorids=None, ks=None, key_added='coef',
-                max_frac_pcs=0.15, nsteps=None, show_progress=False, allow_low_sample_size=False, **kwargs):
+                max_frac_pcs=0.15, nsteps=None, show_progress=False, allow_low_sample_size=False,
+                return_full=False, **kwargs):
     out = select_output(show_progress)
 
     # Check formats of iputs
@@ -190,6 +191,12 @@ def association(data, y, sid_name, batches=None, covs=None, donorids=None, ks=No
         show_progress=show_progress, ks=ks,
         **kwargs)
     
-    d.obs[key_added] = res.ncorrs
+    # store results at the neighborhood level
+    if key_added in data.obs:
+        warnings.warn(f"Key '{key_added}' already exists in data.obs. Overwriting.")
+    data.obs[key_added] = res.ncorrs
 
-    return res.p, res
+    if return_full:
+        return res
+    else:
+        return res.p
