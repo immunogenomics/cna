@@ -38,24 +38,17 @@ def diffuse(data, s, nsteps, show_progress=False, self_weight=1):
         pass
     return s
 
-def _df_to_array(data, x):
-    if type(x) in [pd.DataFrame, pd.Series]:
-        if all(x.index == data.samplem.index):
-            return x.values
-        else:
-            print('ERROR: index does not match index of data.samplem')
-    else:
-        return x
-
 # creates a neighborhood abundance matrix
-def _nam(data, nsteps=None, maxnsteps=15, self_weight=1, show_progress=False):
+def _nam(data, sid_name, sids=None, nsteps=None, maxnsteps=15, self_weight=1, show_progress=False):
     out = select_output(show_progress)
     
     def R(A, B):
         return ((A - A.mean(axis=0))*(B - B.mean(axis=0))).mean(axis=0) \
             / A.std(axis=0) / B.std(axis=0)
 
-    S = pd.get_dummies(data.obs_sampleids)[data.samplem.index.values]
+    S = pd.get_dummies(data.obs[sid_name])
+    if sids is not None:
+        S = S[sids]
     C = S.sum(axis=0)
 
     prevmedkurt = np.inf
@@ -76,7 +69,7 @@ def _nam(data, nsteps=None, maxnsteps=15, self_weight=1, show_progress=False):
         gc.collect()
 
     snorm = (s / C).T
-    snorm.index.name = data.samplem.index.name
+    snorm.index.name = sid_name
     return snorm
 
 def _batch_kurtosis(NAM, batches):
@@ -99,7 +92,7 @@ def _qc_nam(NAM, batches, show_progress=False):
     keep = (kurtoses < threshold)
     print('keeping', keep.sum(), 'neighborhoods', file=out)
 
-    return NAM[:, keep], keep
+    return NAM.iloc[:, keep], keep
 
 # residualizes covariates and batch information out of NAM
 def _resid_nam(NAM, covs, batches, ridge=None, show_progress=False):
@@ -108,7 +101,7 @@ def _resid_nam(NAM, covs, batches, ridge=None, show_progress=False):
     N = len(NAM)
     NAM_ = NAM - NAM.mean(axis=0)
     if covs is None:
-        covs = np.ones((N, 0))
+        covs = pd.DataFrame(np.ones((N, 0)), index=NAM.index)
     else:
         covs = (covs - covs.mean(axis=0))/covs.std(axis=0)
 
@@ -151,70 +144,18 @@ def _svd_nam(NAM):
 
     return (U, svs, V)
 
-def nam(data, batches=None, covs=None, filter_samples=None,
+def nam(data, sid_name, batches=None,
     nsteps=None, self_weight=1, max_frac_pcs=0.15, suffix='', ks = None,
     force_recompute=False, show_progress=False, **kwargs):
     out = select_output(show_progress)
-
-    def safe_same(A, B):
-        if A is None: A = np.zeros(0)
-        if B is None: B = np.zeros(0)
-        if A.shape == B.shape:
-            return np.allclose(A, B, equal_nan = True)
-        else:
-            return False
     
-    # error checking
-    covs = _df_to_array(data, covs)
-    batches = _df_to_array(data, batches)
+    # ensure batches are properly formatted and initialized
     if batches is None:
-        batches = np.array([1]*data.N)
-    if filter_samples is None:
-        if covs is not None:
-            filter_samples = ~np.any(np.isnan(covs), axis=1)
-        else:
-            filter_samples = np.repeat(True, data.N)
-    else:
-        filter_samples = _df_to_array(data, filter_samples)
-
-    du = data.uns
+        batches = pd.Series(np.ones(len(data.obs[sid_name].unique()), index=data.obs[sid_name].unique()))
+    
     # compute and QC NAM
-    if force_recompute or \
-        'NAM.T'+suffix not in du or \
-        not safe_same(batches, du['_batches'+suffix]):
-        print('qcd NAM not found; computing and saving', file=out)
-        NAM = _nam(data, nsteps=nsteps, self_weight=self_weight, show_progress=show_progress)
-        NAMqc, keep = _qc_nam(NAM.values, batches, show_progress=show_progress)
-        du['NAM.T'+suffix] = pd.DataFrame(NAMqc, index=NAM.index, columns=NAM.columns[keep]).T
-        du['keptcells'+suffix] = keep
-        du['_batches'+suffix] = batches
+    print('computing NAM', file=out)
+    NAM = _nam(data, sid_name, nsteps=nsteps, self_weight=self_weight, show_progress=show_progress)
+    NAMqc, keep = _qc_nam(NAM, batches, show_progress=show_progress)
 
-    # correct for batch/covariates and SVD
-    if force_recompute or \
-        'NAM_sampleXpc'+suffix not in du or \
-        not safe_same(covs, du['_covs'+suffix]) or \
-        not safe_same(filter_samples, du['_filter_samples'+suffix]):
-
-        print('covariate-adjusted NAM not found; computing and saving', file=out)
-        du['_filter_samples'+suffix] = filter_samples
-        NAM = du['NAM.T'+suffix].T.iloc[filter_samples]
-        NAM_resid, M, r = _resid_nam(NAM.values,
-                                covs[filter_samples] if covs is not None else covs,
-                                batches[filter_samples] if batches is not None else batches,
-                                show_progress=show_progress)
-
-        print('computing SVD', file=out)
-        du['NAM_resid.T'+suffix] = NAM_resid.T
-        U, svs, V = _svd_nam(NAM_resid)
-        npcs = min(V.shape[1], max([10]+[int(max_frac_pcs * data.N)]+[ks if ks is not None else []][0]))
-        du['NAM_sampleXpc'+suffix] = pd.DataFrame(U,
-            index=NAM.index,
-            columns=['PC'+str(i) for i in range(1, len(U.T)+1)])
-        du['NAM_svs'+suffix] = svs
-        du['NAM_varexp'+suffix] = svs / len(U) / len(V)
-        du['NAM_nbhdXpc'+suffix] = pd.DataFrame(V[:,:npcs],
-            index=NAM.columns,
-            columns=['PC'+str(i) for i in range(1, npcs+1)])
-        du['_M'+suffix] = M
-        du['_r'+suffix] = r
-        du['_covs'+suffix] = (np.zeros(0) if covs is None else covs)
+    return pd.DataFrame(NAMqc, index=NAM.index, columns=NAM.columns, dtype=float)

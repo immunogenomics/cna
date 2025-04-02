@@ -4,7 +4,7 @@ import scipy.stats as st
 import gc, warnings
 from argparse import Namespace
 from ._stats import conditional_permutation, grouplevel_permutation, empirical_fdrs
-from ._nam import nam, _df_to_array
+from ._nam import nam, _resid_nam, _svd_nam
 from ._out import select_output
 
 def _association(NAMsvd, NAMresid, M, r, y, batches, donorids, ks=None, Nnull=1000, force_permute_all=False,
@@ -24,7 +24,7 @@ def _association(NAMsvd, NAMresid, M, r, y, batches, donorids, ks=None, Nnull=10
 
     if ks is None:
         incr = max(int(0.02*n), 1)
-        maxnpcs = min(4*incr, int(n/5))
+        maxnpcs = max(min(4*incr, int(n/5)), 1)
         ks = np.arange(incr, maxnpcs+1, incr)
     if max(ks) + r >= n:
         raise ValueError(
@@ -128,31 +128,37 @@ def _association(NAMsvd, NAMresid, M, r, y, batches, donorids, ks=None, Nnull=10
             'nullr2_mean':nullr2s.mean(), 'nullr2_std':nullr2s.std()}
     return Namespace(**res)
 
-def association(data, y, batches=None, covs=None, donorids=None, nsteps=None, suffix='',
-    force_recompute=False, show_progress=False, allow_low_sample_size=False, **kwargs):
-    # output level
+def association(data, y, sid_name, batches=None, covs=None, donorids=None, ks=None, key_added='coef',
+                max_frac_pcs=0.15, nsteps=None, show_progress=False, allow_low_sample_size=False, **kwargs):
     out = select_output(show_progress)
+
+    # Check formats of iputs
+    if not isinstance(y, pd.Series):
+        raise TypeError(f"'y' must be a pandas Series, but got {type(y)}")
+    if batches is not None and not isinstance(batches, pd.Series):
+        raise TypeError(f"'batches' must be a pandas Series, but got {type(batches)}")
+    if covs is not None and not isinstance(covs, pd.DataFrame):
+        raise TypeError(f"'covs' must be a pandas DataFrame, but got {type(covs)}")
+    if donorids is not None and not isinstance(donorids, pd.Series):
+        raise TypeError(f"'donorids' must be a pandas Series, but got {type(donorids)}")
+    if not set(y.index).issubset(set(data.obs[sid_name])):
+        raise ValueError("The index of 'y' contains values not present in 'data[sid_name]'")
     
-    # formatting and error checking
+    # Ensure batches and donorids not simultaneously set
     if batches is not None and donorids is not None:
-        raise ValueError('CNA does not currently support conditioning on batch '+\
+        raise ValueError('We do not currently support conditioning on batch '+\
             'while also accounting for multiple samples per donor')
 
     if batches is None:
-        batches = np.ones(data.N)
-    covs = _df_to_array(data, covs)
-    batches = _df_to_array(data, batches)
-    y = _df_to_array(data, y)
-    if y.shape != (data.N,):
+        batches = pd.Series(np.ones(len(y)), index=y.index)
+    N = (~np.isnan(y)).sum()
+    if N < 10 and not allow_low_sample_size:
         raise ValueError(
-            'y should be an array of length data.N; instead its shape is: '+str(y.shape))
-    if data.N < 10 and not allow_low_sample_size:
-        raise ValueError(
-            'Dataset has fewer than 10 samples. CNA may have poor power at low sample sizes '+\
-            'because its null distribution is one in which each sample\'s single-cell profile '+\
-            'is unchanged but the sample labels are randomly assigned. If you want to run CNA '+\
-            'at this sample size despite the possibility of low power, you can do so by '+\
-            'invoking the association(...) function with the argument '+\
+            'You are supplying phenotype information on fewer than 10 samples. This may lead to '+\
+            'poor power at low sample sizes because its null distribution is one in which each '+\
+            'sample\'s single-cell profile is unchanged but the sample labels are randomly '+\
+            'assigned. If you want to run CNA at this sample size despite the possibility of low '+\
+            'power, you can do so by invoking the association(...) function with the argument '+\
             'allow_low_sample_size=True.')
 
     if covs is not None:
@@ -166,24 +172,24 @@ def association(data, y, batches=None, covs=None, donorids=None, nsteps=None, su
         filter_samples = ~np.isnan(y)
 
     du = data.uns
-    nam(data, batches=batches, covs=covs, filter_samples=filter_samples,
-                    nsteps=nsteps, suffix=suffix, force_recompute=force_recompute,
-                    show_progress=show_progress,
-                    **kwargs)
-    NAMsvd = (
-        du['NAM_sampleXpc'+suffix].values,
-        du['NAM_svs'+suffix],
-        du['NAM_nbhdXpc'+suffix].values
-        )
+    NAM = nam(data, sid_name, batches=batches, nsteps=nsteps, show_progress=show_progress, **kwargs)
+    NAM = NAM[filter_samples]
+    NAM_resid, M, r = _resid_nam(NAM,
+                            covs[filter_samples] if covs is not None else covs,
+                            batches[filter_samples] if batches is not None else batches,
+                            show_progress=show_progress)
+    
+    U, svs, V = _svd_nam(NAM_resid)
+    npcs = min(V.shape[1], max([10]+[int(max_frac_pcs * N)]+[ks if ks is not None else []][0]))
+    NAMsvd = (U, svs, V[:,:npcs])
 
     print('performing association test', file=out)
-    res = _association(NAMsvd, du['NAM_resid.T'+suffix].T, du['_M'+suffix], du['_r'+suffix],
-        y[du['_filter_samples'+suffix]], batches[du['_filter_samples'+suffix]],
-        donorids[du['_filter_samples'+suffix]] if donorids is not None else None,
-        show_progress=show_progress,
+    res = _association(NAMsvd, NAM_resid, M, r,
+        y[filter_samples].values, batches[filter_samples].values,
+        donorids[filter_samples].values if donorids is not None else None,
+        show_progress=show_progress, ks=ks,
         **kwargs)
+    
+    d.obs[key_added] = res.ncorrs
 
-    # add info about kept cells
-    vars(res)['kept'] = du['keptcells'+suffix]
-
-    return res
+    return res.p, res
