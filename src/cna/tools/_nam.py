@@ -175,7 +175,7 @@ def _resid_nam(NAM, covs, batches, ridge=None, npcs=None, show_progress=False):
 
 def nam(data, sid_name, batches=None,
     nsteps=None, self_weight=1, max_frac_pcs=0.15, suffix='', ks = None,
-    force_recompute=False, show_progress=False, **kwargs):
+    show_progress=False, **kwargs):
     out = select_output(show_progress)
     
     # ensure batches are properly formatted and initialized
