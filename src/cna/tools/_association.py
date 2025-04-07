@@ -4,7 +4,7 @@ import scipy.stats as st
 import gc, warnings
 from argparse import Namespace
 from ._stats import conditional_permutation, grouplevel_permutation, empirical_fdrs
-from ._nam import nam, _resid_nam, _svd_nam
+from ._nam import nam, _resid_nam
 from ._out import select_output
 
 def _association(NAMsvd, NAMresid, M, r, y, batches, donorids, ks=None, Nnull=1000, force_permute_all=False,
@@ -100,7 +100,7 @@ def _association(NAMsvd, NAMresid, M, r, y, batches, donorids, ks=None, Nnull=10
 
         maxcorr = max(np.abs(ncorrs).max(), 0.001)
         fdr_thresholds = np.arange(maxcorr/4, maxcorr, maxcorr/400)
-        fdr_vals = empirical_fdrs(ncorrs, nullncorrs, fdr_thresholds)
+        fdr_vals = empirical_fdrs(ncorrs.values, nullncorrs.values, fdr_thresholds)
 
         fdrs = pd.DataFrame({
             'threshold':fdr_thresholds,
@@ -163,7 +163,7 @@ def association(data, y, sid_name, batches=None, covs=None, donorids=None, ks=No
             'allow_low_sample_size=True.')
 
     if covs is not None:
-        filter_samples = ~(np.isnan(y) | np.any(np.isnan(covs), axis=1))
+        filter_samples = ~(y.isna() | covs.isna().any(axis=1))
         if donorids is not None:
             print('WARNING: CNA currently does not account for multiple samples per donor '+\
                 'when conditioning on covariates. This conditioning may therefore account '+\
@@ -173,28 +173,38 @@ def association(data, y, sid_name, batches=None, covs=None, donorids=None, ks=No
         filter_samples = ~np.isnan(y)
 
     du = data.uns
-    NAM = nam(data, sid_name, batches=batches, nsteps=nsteps, show_progress=show_progress, **kwargs)
+    NAM, kept = nam(data, sid_name, batches=batches, nsteps=nsteps, show_progress=show_progress, **kwargs)
     NAM = NAM[filter_samples]
-    NAM_resid, M, r = _resid_nam(NAM,
+    npcs = min(N, max([10]+[int(max_frac_pcs * N)]+[ks if ks is not None else []][0]))
+    res = _resid_nam(NAM,
                             covs[filter_samples] if covs is not None else covs,
                             batches[filter_samples] if batches is not None else batches,
+                            npcs=npcs,
                             show_progress=show_progress)
-    
-    U, svs, V = _svd_nam(NAM_resid)
-    npcs = min(V.shape[1], max([10]+[int(max_frac_pcs * N)]+[ks if ks is not None else []][0]))
-    NAMsvd = (U, svs, V[:,:npcs])
 
     print('performing association test', file=out)
-    res = _association(NAMsvd, NAM_resid, M, r,
+    res_ = _association(
+        (res.namresid_sampleXpc.values, res.namresid_svs.values, res.namresid_nbhdXpc.values),
+        res.namresid, res.M, res.r,
         y[filter_samples].values, batches[filter_samples].values,
         donorids[filter_samples].values if donorids is not None else None,
         show_progress=show_progress, ks=ks,
         **kwargs)
+    res.__dict__.update(vars(res_)) # add info from from res_ to res
+    res.nam = NAM
+    res.kept = kept
     
     # store results at the neighborhood level
     if key_added in data.obs:
         warnings.warn(f"Key '{key_added}' already exists in data.obs. Overwriting.")
-    data.obs[key_added] = res.ncorrs
+    data.obs[key_added] = np.NaN
+    data.obs.loc[kept, key_added] = res.ncorrs
+    
+    # compute local FDRs
+    def min_fdr_for_corr(ncorr):
+        matching_fdrs = res.fdrs.loc[res.fdrs.threshold <= abs(ncorr)].fdr
+        return matching_fdrs.min() if not matching_fdrs.empty else 1
+    data.obs[f'{key_added}_fdr'] = data.obs[key_added].apply(min_fdr_for_corr)
 
     if return_full:
         return res

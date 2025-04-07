@@ -7,7 +7,7 @@ from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 # build violin plot that stratifies neighborhood coefficients by a discretization of the data
 #   such as a clustering. Any additional keyword arguments are passed to
 #   matplotlib.violinplot
-def violinplot(data, res, stratification, ax=None, cmap='seismic', **kwargs):
+def violinplot(data, stratification, key='coef', ax=None, cmap='seismic', **kwargs):
     if ax is None:
         ax = plt.gca()
     kwargs_ = {
@@ -19,7 +19,7 @@ def violinplot(data, res, stratification, ax=None, cmap='seismic', **kwargs):
     kwargs_.update(kwargs)
 
     bins = data.obs[stratification].unique()
-    violins = ax.violinplot([res.ncorrs[data.obs[stratification]==v] for v in bins],
+    violins = ax.violinplot([data.obs.loc[data.obs[stratification]==v][key] for v in bins],
                             np.arange(len(bins)),
                             **kwargs_)
     (ymin, ymax), (xmin, xmax) = ax.get_ylim(), ax.get_xlim()

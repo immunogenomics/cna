@@ -5,6 +5,7 @@ import scipy.stats as st
 import anndata
 import gc
 from packaging import version
+from argparse import Namespace
 from ._out import select_output
 
 def get_connectivity(data):
@@ -94,8 +95,24 @@ def _qc_nam(NAM, batches, show_progress=False):
 
     return NAM.iloc[:, keep], keep
 
+#performs SVD of NAM
+def svd_nam(NAM):
+    NAM = NAM - NAM.mean(axis=0)
+    NAM = NAM / NAM.std(axis=0)
+    U, svs, UT = np.linalg.svd(NAM.dot(NAM.T))
+    V = NAM.T.dot(U) / np.sqrt(svs)
+
+    return (pd.DataFrame(U,
+                        index=NAM.index,
+                        columns=['PC'+str(i) for i in range(1, len(U.T)+1)]),
+            pd.Series(svs, index=['PC'+str(i) for i in range(1, len(U.T)+1)]),
+            pd.DataFrame(V.values,
+                        index=NAM.columns,
+                        columns=['PC'+str(i) for i in range(1, len(U.T)+1)])
+    )
+
 # residualizes covariates and batch information out of NAM
-def _resid_nam(NAM, covs, batches, ridge=None, show_progress=False):
+def _resid_nam(NAM, covs, batches, ridge=None, npcs=None, show_progress=False):
     out = select_output(show_progress)
     
     N = len(NAM)
@@ -135,14 +152,26 @@ def _resid_nam(NAM, covs, batches, ridge=None, show_progress=False):
             if np.median(kurtoses) <= 6:
                 break
 
-    return NAM_ / NAM_.std(axis=0), M, len(C.T)
+    # standardize NAM
+    NAM_ = NAM_ / NAM_.std(axis=0)
+    NAM_ = pd.DataFrame(NAM_, index=NAM.index, columns=NAM.columns)
 
-#performs SVD of NAM
-def _svd_nam(NAM):
-    U, svs, UT = np.linalg.svd(NAM.dot(NAM.T))
-    V = NAM.T.dot(U) / np.sqrt(svs)
+    # do SVD
+    U, svs, V = svd_nam(NAM_)
+    if npcs is None:
+        npcs = len(V.T)
 
-    return (U, svs, V)
+    # store results
+    res = Namespace()
+    res.M = M
+    res.r = len(C.T)
+    res.namresid = NAM_
+    res.namresid_sampleXpc = U
+    res.namresid_nbhdXpc = V
+    res.namresid_svs = svs[:npcs]
+    res.namresid_varexp = svs / len(U) / len(V)
+
+    return res
 
 def nam(data, sid_name, batches=None,
     nsteps=None, self_weight=1, max_frac_pcs=0.15, suffix='', ks = None,
@@ -158,4 +187,4 @@ def nam(data, sid_name, batches=None,
     NAM = _nam(data, sid_name, nsteps=nsteps, self_weight=self_weight, show_progress=show_progress)
     NAMqc, keep = _qc_nam(NAM, batches, show_progress=show_progress)
 
-    return pd.DataFrame(NAMqc, index=NAM.index, columns=NAM.columns, dtype=float)
+    return pd.DataFrame(NAMqc, index=NAM.index, columns=NAM.columns[keep], dtype=float), keep

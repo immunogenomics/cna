@@ -1,59 +1,36 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import scanpy as sc
 
-def umap_ncorr(data, res, fdr_thresh=None, **kwargs):
+def umap_ncorr(data, fdr_thresh=None, key='coef', **kwargs):
     if fdr_thresh is None:
-        fdr_thresh = 0.05
+        fdr_thresh = 0.1
 
-    passed = res.fdrs[res.fdrs.fdr <= fdr_thresh]
+    passed = data.obs[f'{key}_fdr'] <= fdr_thresh
     if len(passed) == 0:
         print('no neighborhoods were significant at FDR <', fdr_thresh)
-        thresh = np.infty
-    else:
-        thresh = passed.threshold.iloc[0]
 
-    ix1 = np.repeat(False, len(data))
-    ix1[res.kept] = np.abs(res.ncorrs) > thresh
-    c = res.ncorrs[np.abs(res.ncorrs) > thresh]
+    umap_overlay(data, passed, key, **kwargs)
 
-    umap_overlay(data, ix1, c, **kwargs)
-
-def umap_overlay(data, ix1, c,
+def umap_overlay(data, mask, key,
     scatter0={},
     scatter1={},
-    ax=None, noframe=True, colorbar=True, **cbar_kw):
+    ax=None, noframe=True):
 
     # set default plotting options
-    scatter0_ = {'alpha':0.1, 's':2, 'color':'grey'}
-    scatter1_ = {'alpha':0.2, 's':8, 'c':c, 'cmap':'seismic',
+    if ax is None:
+        ax = plt.gca()
+    c = data.obs[mask][key]
+    scatter0_ = {'alpha':0.8, 's':2}
+    scatter1_ = {'alpha':0.9, 's':8, 'cmap':'seismic',
                     'vmin':-np.abs(c).max() if len(c) > 0 else 0,
                     'vmax':np.abs(c).max() if len(c) > 0 else 1}
     scatter0_.update(scatter0)
     scatter1_.update(scatter1)
 
-    if ax is None:
-        ax = plt.gca()
-
     # do plotting
-    ax.scatter(*data.obsm['X_umap'].T, **scatter0_)
-    res = ax.scatter(*data.obsm['X_umap'][ix1].T, **scatter1_)
+    sc.pl.umap(data, ax=ax, show=False, **scatter0_)
+    sc.pl.umap(data[mask], color=key, ax=ax, show=False, title='', **scatter1_)
 
-    # remove ticks and spines
-    ax.set_xticks([]); ax.set_yticks([])
-    if noframe:
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.spines['left'].set_visible(False)
-        ax.spines['bottom'].set_visible(False)
-
-    # add colorbar if needed
-    if colorbar:
-        fig = plt.gcf()
-        cbar = fig.colorbar(res, ax=ax, **cbar_kw)
-        cbar.set_alpha(1)
-        cbar.draw_all()
-    else:
-        cbar = None
-
-    return ax, cbar
+    return ax
