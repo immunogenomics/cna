@@ -143,7 +143,9 @@ def association(data, y, sid_name, batches=None, covs=None, donorids=None, ks=No
     if donorids is not None and not isinstance(donorids, pd.Series):
         raise TypeError(f"'donorids' must be a pandas Series, but got {type(donorids)}")
     if not set(y.index).issubset(set(data.obs[sid_name])):
-        raise ValueError("The index of 'y' contains values not present in 'data[sid_name]'")
+        print("WARNING: index of 'y' contains values not present in 'data[sid_name]'. These samples will be ignored.")
+    if not set(data.obs[sid_name]).issubset(set(y.index)):
+        raise ValueError("'data[sid_name]' contains values not present in the index of 'y'.")
     
     # Ensure batches and donorids not simultaneously set
     if batches is not None and donorids is not None:
@@ -163,19 +165,28 @@ def association(data, y, sid_name, batches=None, covs=None, donorids=None, ks=No
             'allow_low_sample_size=True.')
 
     if covs is not None:
-        filter_samples = ~(y.isna() | covs.isna().any(axis=1))
+        filter_samples = ~(y.isna() | covs.isna().any(axis=1)) & y.index.isin(data.obs[sid_name].unique())
         if donorids is not None:
             print('WARNING: CNA currently does not account for multiple samples per donor '+\
                 'when conditioning on covariates. This conditioning may therefore account '+\
                 'only incompletely for the covariates of interest. We expect this to make '+\
                 'only minor differences in most cases, but we have not investigated it formally')
     else:
-        filter_samples = ~np.isnan(y)
+        filter_samples = ~np.isnan(y) & y.index.isin(data.obs[sid_name].unique())
 
-    du = data.uns
+    # compute NAM
     NAM, kept = nam(data, sid_name, batches=batches, nsteps=nsteps, show_progress=show_progress, **kwargs)
-    NAM = NAM[filter_samples]
+    
+    # align all indices
+    NAM = NAM.reindex(y.index)
+    batches = batches.reindex(y.index)
+    covs = covs.reindex(y.index) if covs is not None else None
+    donorids = donorids.reindex(y.index) if donorids is not None else None
+    filter_samples = filter_samples.reindex(y.index)
+
+    # residualize NAM
     npcs = min(N, max([10]+[int(max_frac_pcs * N)]+[ks if ks is not None else []][0]))
+    NAM = NAM[filter_samples]
     res = _resid_nam(NAM,
                             covs[filter_samples] if covs is not None else covs,
                             batches[filter_samples] if batches is not None else batches,

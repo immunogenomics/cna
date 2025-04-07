@@ -71,6 +71,7 @@ def _nam(data, sid_name, sids=None, nsteps=None, maxnsteps=15, self_weight=1, sh
 
     snorm = (s / C).T
     snorm.index.name = sid_name
+    snorm.index = snorm.index.astype(str)
     return snorm
 
 def _batch_kurtosis(NAM, batches):
