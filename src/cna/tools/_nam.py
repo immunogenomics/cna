@@ -181,7 +181,7 @@ def nam(data, sid_name, batches=None,
     
     # ensure batches are properly formatted and initialized
     if batches is None:
-        batches = pd.Series(np.ones(len(data.obs[sid_name].unique()), index=data.obs[sid_name].unique()))
+        batches = pd.Series(np.ones(len(data.obs[sid_name].unique())), index=data.obs[sid_name].unique())
     
     # compute and QC NAM
     print('computing NAM', file=out)
