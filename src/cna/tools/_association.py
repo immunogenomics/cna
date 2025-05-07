@@ -184,9 +184,12 @@ def association(data, y, sid_name, batches=None, covs=None, donorids=None, ks=No
     donorids = donorids.reindex(y.index) if donorids is not None else None
     filter_samples = filter_samples.reindex(y.index)
 
-    # residualize NAM
+    # residualize NAM (after removing any columns that have zero variance after the sample filtering above)
     npcs = min(N, max([10]+[int(max_frac_pcs * N)]+[ks if ks is not None else []][0]))
     NAM = NAM[filter_samples]
+    zero_variance_col_ix = np.where(NAM.std(axis=0) == 0)[0]
+    kept[kept][zero_variance_col_ix] = False
+    NAM = NAM.drop(columns=NAM.columns[zero_variance_cols])
     res = _resid_nam(NAM,
                             covs[filter_samples] if covs is not None else covs,
                             batches[filter_samples] if batches is not None else batches,
