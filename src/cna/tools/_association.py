@@ -189,7 +189,7 @@ def association(data, y, sid_name, batches=None, covs=None, donorids=None, ks=No
     NAM = NAM[filter_samples]
     zero_variance_col_ix = np.where(NAM.std(axis=0) == 0)[0]
     kept[kept][zero_variance_col_ix] = False
-    NAM = NAM.drop(columns=NAM.columns[zero_variance_cols])
+    NAM = NAM.drop(columns=NAM.columns[zero_variance_col_ix])
     res = _resid_nam(NAM,
                             covs[filter_samples] if covs is not None else covs,
                             batches[filter_samples] if batches is not None else batches,
