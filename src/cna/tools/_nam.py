@@ -71,10 +71,11 @@ def _nam(data, sid_name, sids=None, nsteps=None, maxnsteps=15, self_weight=1, sh
 
     snorm = (s / C).T
     snorm.index.name = sid_name
-    snorm.index = snorm.index.astype(str)
+    # snorm.index = snorm.index.astype(str)
     return snorm
 
 def _batch_kurtosis(NAM, batches):
+    batches = batches.reindex(NAM.index)
     return st.kurtosis(np.array([
                 NAM[batches == b].mean(axis=0) for b in np.unique(batches)
                 ]), axis=0) + 3
@@ -113,7 +114,7 @@ def svd_nam(NAM):
     )
 
 # residualizes covariates and batch information out of NAM
-def _resid_nam(NAM, covs, batches, ridge=None, npcs=None, show_progress=False):
+def _resid_nam(NAM, covs, batches, ridges=None, npcs=None, show_progress=False):
     out = select_output(show_progress)
     
     N = len(NAM)
@@ -126,23 +127,23 @@ def _resid_nam(NAM, covs, batches, ridge=None, npcs=None, show_progress=False):
     if batches is None or len(np.unique(batches)) == 1:
         C = covs
         if len(C.T) == 0:
-            M = np.eye(N)
+            M = pd.DataFrame(np.eye(N), columns=NAM_.index, index=NAM_.index)
         else:
             M = np.eye(N) - C.dot(np.linalg.solve(C.T.dot(C), C.T))
+            M.columns = M.index
         NAM_ = M.dot(NAM_)
     else:
-        B = pd.get_dummies(batches).values
+        B = pd.get_dummies(batches)
         B = (B - B.mean(axis=0))/B.std(axis=0)
-        C = np.hstack([B, covs])
+        C = pd.concat([B, covs], axis=1)
 
-        if ridge is not None:
-            ridges = [ridge]
-        else:
+        if ridges is None:
             ridges = [1e5, 1e4, 1e3, 1e2, 1e1, 1e0, 1e-1, 1e-2, 1e-3, 1e-4, 0]
 
         for ridge in ridges:
             L = np.diag([1]*len(B.T)+[0]*(len(C.T)-len(B.T)))
             M = np.eye(N) - C.dot(np.linalg.solve(C.T.dot(C) + ridge*len(C)*L, C.T))
+            M.columns = M.index
             NAM_ = M.dot(NAM_)
 
             kurtoses = _batch_kurtosis(NAM_, batches)

@@ -130,7 +130,7 @@ def _association(NAMsvd, NAMresid, M, r, y, batches, donorids, ks=None, Nnull=10
 
 def association(data, y, sid_name, batches=None, covs=None, donorids=None, ks=None, key_added='coef',
                 max_frac_pcs=0.15, nsteps=None, show_progress=False, allow_low_sample_size=False,
-                return_full=False, **kwargs):
+                return_full=False, ridges=None, **kwargs):
     out = select_output(show_progress)
 
     # Check formats of iputs
@@ -194,6 +194,7 @@ def association(data, y, sid_name, batches=None, covs=None, donorids=None, ks=No
                             covs[filter_samples] if covs is not None else covs,
                             batches[filter_samples] if batches is not None else batches,
                             npcs=npcs,
+                            ridges=ridges,
                             show_progress=show_progress)
 
     print('performing association test', file=out)
