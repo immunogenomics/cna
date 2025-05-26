@@ -158,7 +158,7 @@ def association(data, y, sid_name, batches=None, covs=None, donorids=None, ks=No
     if N < 10 and not allow_low_sample_size:
         raise ValueError(
             'You are supplying phenotype information on fewer than 10 samples. This may lead to '+\
-            'poor power at low sample sizes because its null distribution is one in which each '+\
+            'poor power at low sample sizes because CNA\'s null distribution is one in which each '+\
             'sample\'s single-cell profile is unchanged but the sample labels are randomly '+\
             'assigned. If you want to run CNA at this sample size despite the possibility of low '+\
             'power, you can do so by invoking the association(...) function with the argument '+\
