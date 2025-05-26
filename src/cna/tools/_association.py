@@ -128,12 +128,7 @@ def _association(NAMsvd, NAMresid, M, r, y, batches, donorids, ks=None, Nnull=10
             'nullr2_mean':nullr2s.mean(), 'nullr2_std':nullr2s.std()}
     return Namespace(**res)
 
-def association(data, y, sid_name, batches=None, covs=None, donorids=None, ks=None, key_added='coef',
-                max_frac_pcs=0.15, nsteps=None, show_progress=False, allow_low_sample_size=False,
-                return_full=False, ridges=None, **kwargs):
-    out = select_output(show_progress)
-
-    # Check formats of iputs
+def check_inputs(data, y, sid_name, batches, covs, donorids, allow_low_sample_size):
     if not isinstance(y, pd.Series):
         raise TypeError(f"'y' must be a pandas Series, but got {type(y)}")
     if batches is not None and not isinstance(batches, pd.Series):
@@ -151,19 +146,10 @@ def association(data, y, sid_name, batches=None, covs=None, donorids=None, ks=No
     if batches is not None and donorids is not None:
         raise ValueError('We do not currently support conditioning on batch '+\
             'while also accounting for multiple samples per donor')
-
+    
     if batches is None:
         batches = pd.Series(np.ones(len(y)), index=y.index)
-    N = (~np.isnan(y)).sum()
-    if N < 10 and not allow_low_sample_size:
-        raise ValueError(
-            'You are supplying phenotype information on fewer than 10 samples. This may lead to '+\
-            'poor power at low sample sizes because CNA\'s null distribution is one in which each '+\
-            'sample\'s single-cell profile is unchanged but the sample labels are randomly '+\
-            'assigned. If you want to run CNA at this sample size despite the possibility of low '+\
-            'power, you can do so by invoking the association(...) function with the argument '+\
-            'allow_low_sample_size=True.')
-
+    
     if covs is not None:
         filter_samples = ~(y.isna() | covs.isna().any(axis=1)) & y.index.isin(data.obs[sid_name].unique())
         if donorids is not None:
@@ -174,22 +160,50 @@ def association(data, y, sid_name, batches=None, covs=None, donorids=None, ks=No
     else:
         filter_samples = ~np.isnan(y) & y.index.isin(data.obs[sid_name].unique())
 
+    N = filter_samples.sum()
+    if N < 10 and not allow_low_sample_size:
+        raise ValueError(
+            'You are supplying phenotype information on fewer than 10 samples. This may lead to '+\
+            'poor power at low sample sizes because CNA\'s null distribution is one in which each '+\
+            'sample\'s single-cell profile is unchanged but the sample labels are randomly '+\
+            'assigned. If you want to run CNA at this sample size despite the possibility of low '+\
+            'power, you can do so by invoking the association(...) function with the argument '+\
+            'allow_low_sample_size=True.')
+
+    return batches, filter_samples
+
+def compute_nam_and_reindex(data, y, sid_name, batches, covs, donorids, filter_samples, nsteps, show_progress, **kwargs):
     # compute NAM
     NAM, kept = nam(data, sid_name, batches=batches, nsteps=nsteps, show_progress=show_progress, **kwargs)
-    
-    # align all indices
     NAM = NAM.reindex(y.index)
-    batches = batches.reindex(y.index)
-    covs = covs.reindex(y.index) if covs is not None else None
-    donorids = donorids.reindex(y.index) if donorids is not None else None
-    filter_samples = filter_samples.reindex(y.index)
 
-    # residualize NAM (after removing any columns that have zero variance after the sample filtering above)
-    npcs = min(N, max([10]+[int(max_frac_pcs * N)]+[ks if ks is not None else []][0]))
+    # filter samples and drop any columns that then have zero variance
     NAM = NAM[filter_samples]
     zero_variance_col_ix = np.where(NAM.std(axis=0) == 0)[0]
     kept[kept][zero_variance_col_ix] = False
     NAM = NAM.drop(columns=NAM.columns[zero_variance_col_ix])
+
+    return (NAM, kept,
+        batches.reindex(y.index),
+        covs.reindex(y.index) if covs is not None else None,
+        donorids.reindex(y.index) if donorids is not None else None,
+        filter_samples.reindex(y.index))
+
+def association(data, y, sid_name, batches=None, covs=None, donorids=None, ks=None, key_added='coef',
+                max_frac_pcs=0.15, nsteps=None, show_progress=False, allow_low_sample_size=False,
+                return_full=False, ridges=None, **kwargs):
+    out = select_output(show_progress)
+
+    # Check formats of inputs and figure out which samples have valid data
+    batches, filter_samples = check_inputs(data, y, sid_name, batches, covs, donorids, allow_low_sample_size)
+
+    # Compute NAM and filter to the appopriate samples and columns
+    NAM, kept, batches, covs, donorids, filter_samples = compute_nam_and_reindex(
+        data, y, sid_name, batches, covs, donorids, filter_samples, nsteps, show_progress, **kwargs)
+
+    # residualize NAM (after removing any columns that have zero variance after the sample filtering above)
+    N = filter_samples.sum()
+    npcs = min(N, max([10]+[int(max_frac_pcs * N)]+[ks if ks is not None else []][0]))
     res = _resid_nam(NAM,
                             covs[filter_samples] if covs is not None else covs,
                             batches[filter_samples] if batches is not None else batches,
