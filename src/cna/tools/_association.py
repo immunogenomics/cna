@@ -153,7 +153,7 @@ def check_inputs(data, y, sid_name, batches, covs, donorids, allow_low_sample_si
     if covs is not None:
         filter_samples = ~(y.isna() | covs.isna().any(axis=1)) & y.index.isin(data.obs[sid_name].unique())
         if donorids is not None:
-            print('WARNING: CNA currently does not account for multiple samples per donor '+\
+            print('WARNING: We currently do not account for multiple samples per donor '+\
                 'when conditioning on covariates. This conditioning may therefore account '+\
                 'only incompletely for the covariates of interest. We expect this to make '+\
                 'only minor differences in most cases, but we have not investigated it formally')
@@ -164,9 +164,9 @@ def check_inputs(data, y, sid_name, batches, covs, donorids, allow_low_sample_si
     if N < 10 and not allow_low_sample_size:
         raise ValueError(
             'You are supplying phenotype information on fewer than 10 samples. This may lead to '+\
-            'poor power at low sample sizes because CNA\'s null distribution is one in which each '+\
+            'poor power at low sample sizes because our null distribution is one in which each '+\
             'sample\'s single-cell profile is unchanged but the sample labels are randomly '+\
-            'assigned. If you want to run CNA at this sample size despite the possibility of low '+\
+            'assigned. If you want to run an analysis at this sample size despite the possibility of low '+\
             'power, you can do so by invoking the association(...) function with the argument '+\
             'allow_low_sample_size=True.')
 
@@ -201,7 +201,7 @@ def association(data, y, sid_name, batches=None, covs=None, donorids=None, ks=No
     NAM, kept, batches, covs, donorids, filter_samples = compute_nam_and_reindex(
         data, y, sid_name, batches, covs, donorids, filter_samples, nsteps, show_progress, **kwargs)
 
-    # residualize NAM (after removing any columns that have zero variance after the sample filtering above)
+    # residualize NAM
     N = filter_samples.sum()
     npcs = min(N, max([10]+[int(max_frac_pcs * N)]+[ks if ks is not None else []][0]))
     res = _resid_nam(NAM,
