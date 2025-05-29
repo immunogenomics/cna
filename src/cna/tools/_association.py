@@ -180,7 +180,8 @@ def compute_nam_and_reindex(data, y, sid_name, batches, covs, donorids, filter_s
     # filter samples and drop any columns that then have zero variance
     NAM = NAM[filter_samples]
     zero_variance_col_ix = np.where(NAM.std(axis=0) == 0)[0]
-    kept[kept][zero_variance_col_ix] = False
+    nz_ix = np.flatnonzero(kept)
+    kept[nz_ix[zero_variance_col_ix]] = False
     NAM = NAM.drop(columns=NAM.columns[zero_variance_col_ix])
 
     return (NAM, kept,
