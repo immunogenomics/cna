@@ -6,10 +6,11 @@ import anndata
 import gc
 from packaging import version
 from argparse import Namespace
+from importlib import metadata
 from ._out import select_output
 
 def get_connectivity(data):
-    av = anndata.__version__
+    av = metadata.version('anndata')
     if type(av) == str:
         av = version.parse(av)
     if av < version.parse("0.7.2"):
