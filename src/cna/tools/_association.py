@@ -11,7 +11,14 @@ def _association(NAMsvd, NAMresid, M, r, y, batches, donorids, ks=None, Nnull=10
                     local_test=True, seed=None, show_progress=False):
     # output level
     out = select_output(show_progress)
-    
+
+    # M arrives as a pandas DataFrame from _resid_nam. Work with it as an array so that
+    # expressions such as ycond[:,None] below remain valid: indexing a Series with a tuple
+    # was deprecated in pandas 1.x and removed in pandas 2.0. Every .std() applied to a
+    # quantity derived from M is given an explicit ddof=1 to preserve the pandas default
+    # that applied when these quantities were Series/DataFrames.
+    M = np.asarray(M)
+
     if seed is not None:
         np.random.seed(seed)
     if force_permute_all:
@@ -49,7 +56,7 @@ def _association(NAMsvd, NAMresid, M, r, y, batches, donorids, ks=None, Nnull=10
 
     def _minp_stats(z):
         zcond = M.dot(z)
-        zcond = zcond / zcond.std()
+        zcond = zcond / zcond.std(ddof=1)
         ps, r2s = np.array([
             _stats(
                 _reg(zcond, k)[0],
@@ -68,7 +75,7 @@ def _association(NAMsvd, NAMresid, M, r, y, batches, donorids, ks=None, Nnull=10
 
     # compute coefficients and r2 with chosen model
     ycond = M.dot(y)
-    ycond /= ycond.std()
+    ycond /= ycond.std(ddof=1)
     yhat, beta = _reg(ycond, k)
     _, fullbeta = _reg(ycond, n)
     r2_perpc = (beta / np.sqrt(ycond.dot(ycond)))**2
@@ -94,7 +101,7 @@ def _association(NAMsvd, NAMresid, M, r, y, batches, donorids, ks=None, Nnull=10
         Nnull = min(1000, Nnull)
         y_ = y_[:,:Nnull]
         ycond_ = M.dot(y_)
-        ycond_ /= ycond_.std(axis=0)
+        ycond_ /= ycond_.std(axis=0, ddof=1)
         gamma_ = U[:,:k].T.dot(ycond_)
         nullncorrs = np.abs(NAMresid.T.dot(ycond_) / n)
 
@@ -172,9 +179,7 @@ def check_inputs(data, y, sid_name, batches, covs, donorids, allow_low_sample_si
 
     return batches, filter_samples
 
-def compute_nam_and_reindex(data, y, sid_name, batches, covs, donorids, filter_samples, nsteps, show_progress, **kwargs):
-    # compute NAM
-    NAM, kept = nam(data, sid_name, batches=batches, nsteps=nsteps, show_progress=show_progress, **kwargs)
+def reindex_and_filter_nam(NAM, kept, y, batches, covs, donorids, filter_samples):
     NAM = NAM.reindex(y.index)
 
     # filter samples and drop any columns that then have zero variance
@@ -189,6 +194,11 @@ def compute_nam_and_reindex(data, y, sid_name, batches, covs, donorids, filter_s
         covs.reindex(y.index) if covs is not None else None,
         donorids.reindex(y.index) if donorids is not None else None,
         filter_samples.reindex(y.index))
+
+def compute_nam_and_reindex(data, y, sid_name, batches, covs, donorids, filter_samples, nsteps, show_progress, **kwargs):
+    # compute NAM
+    NAM, kept = nam(data, sid_name, batches=batches, nsteps=nsteps, show_progress=show_progress, **kwargs)
+    return reindex_and_filter_nam(NAM, kept, y, batches, covs, donorids, filter_samples)
 
 def association(data, y, sid_name, batches=None, covs=None, donorids=None, ks=None, key_added='coef',
                 max_frac_pcs=0.15, nsteps=None, show_progress=False, allow_low_sample_size=False,
